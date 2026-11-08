@@ -6,9 +6,5 @@
 **/.pytest_cache
 node_modules
 .git
-test
-src
-server.js
-package.json
 deploy
 scripts

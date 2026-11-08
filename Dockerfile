@@ -8,6 +8,7 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     PORT=3000
 
 WORKDIR /srv/nikaasi
+# runtime dependencies only (test tools live in requirements-dev.txt)
 COPY backend/requirements.txt backend/requirements.txt
 RUN pip install --no-compile -r backend/requirements.txt
 

@@ -15,7 +15,8 @@ Environment (see .env.example and SECURITY.md):
   RATE_LIMIT_READ_PER_MIN / _WRITE_PER_MIN / _STATIC_PER_MIN / _STAFF_PER_MIN, MAX_STREAMS_PER_IP, MAX_STREAMS
   WEATHER_SOURCE     live (default: real rain from Open-Meteo, real-time clock) | demo (scripted story only)
   WEATHER_REFRESH_S  live rain refresh interval, default 300 · WEATHER_ALERT_MM  "10,25,50" mm/h for yellow/orange/red
-  GEMINI_API_KEY, GEMINI_MODEL, TICK_MS
+  DATA_RETENTION_DAYS  personal data in reports (photo, GPS, name, device id) is removed after this (default 90, 0 = keep)
+  GEMINI_API_KEY, GEMINI_MODEL, GEMINI_REPORT_TIMEOUT_S, TICK_MS
 """
 from __future__ import annotations
 
@@ -162,9 +163,23 @@ def create_app(engine: Engine | None = None) -> FastAPI:
         await asyncio.to_thread(bootstrap_admin)
         if eng.default_mode == "live":
             eng.go_live()  # real-time clock + live rainfall from the start
+        retention = asyncio.create_task(retention_loop())
         yield
+        retention.cancel()
         eng.stop()
         await asyncio.to_thread(store.close)
+
+    async def retention_loop() -> None:
+        """Daily: strip photos, exact GPS, names and device ids from reports older than DATA_RETENTION_DAYS."""
+        days = int(os.environ.get("DATA_RETENTION_DAYS", "90"))
+        while True:
+            try:
+                n = await asyncio.to_thread(store.purge_personal_data, days)
+                if n:
+                    auth.audit(None, "retention.purge", {"reports": n, "olderThanDays": days})
+            except Exception:  # noqa: BLE001 - retention must never take the app down
+                log.exception("retention purge failed")
+            await asyncio.sleep(24 * 3600)
 
     def bootstrap_admin() -> None:
         email, pw = os.environ.get("ADMIN_EMAIL"), os.environ.get("ADMIN_PASSWORD")
@@ -433,7 +448,7 @@ def create_app(engine: Engine | None = None) -> FastAPI:
     # -------- authority: operations
     @app.get("/api/reports/{rid}/photo", tags=["authority"])
     async def report_photo(rid: str = Path(pattern=r"^R-\d{1,6}$"), _: dict = Depends(require_authority)):
-        p = eng.photos.get(rid)
+        p = eng.photos.get(rid) or await asyncio.to_thread(store.get_photo, rid)  # older photos come from PostgreSQL
         m = re.match(r"^data:([^;]+);base64,(.*)$", p or "", re.DOTALL)
         if not m:
             raise HttpError(404, "No photo")

@@ -10,15 +10,17 @@ Nikaasi combines three signals that usually live in separate systems:
 It judges **how serious** the flooding really is, with a confidence level and a plain-language explanation. It then **plans and simulates** a coordinated response: closing and rerouting flooded roads, dispatching CDA drain crews and Rescue 1122, and alerting residents. The authority dashboard shows the zone **before, after, and what would have happened with no response**.
 
 ## Run it
-There are two interchangeable backends. Both serve the same API and the same frontend in `public/`.
+The backend is Python / FastAPI. It serves the API and the frontend in `public/`.
 
-### Python / FastAPI backend (the full-stack app)
+### Python / FastAPI backend
 Requires **Python 3.10+** and, for persistence, **PostgreSQL 14+**.
 ```bash
 cd nikaasi/backend
-pip install -r requirements.txt
+pip install -r requirements.txt          # exact, tested versions
+pip install -r requirements-dev.txt      # only for tests and audits
 python run.py            # http://localhost:3000  ·  API docs: http://localhost:3000/docs (development only)
-python -m pytest         # 22 tests (+3 PostgreSQL tests, see below)
+python -m pytest         # tests (+3 PostgreSQL tests, see below)
+python -m pip_audit -r requirements.txt  # known-vulnerability scan
 ```
 The dashboard needs an account. Set `ADMIN_EMAIL` and `ADMIN_PASSWORD` in `nikaasi/.env` before the first start, or run `python -m app.cli create-user you@example.org --role admin`. Then sign in at `/login.html`. Admins manage users and see the audit log at `/admin.html`. See **[SECURITY.md](SECURITY.md)** for the full security model.
 
@@ -85,14 +87,7 @@ set NIKAASI_TEST_DATABASE_URL=postgresql://postgres:YOUR_POSTGRES_PASSWORD@local
 python -m pytest
 ```
 
-### Node backend (original prototype)
-Requires **Node.js 18+**, with no dependencies.
-```bash
-cd nikaasi
-npm start                # http://localhost:3000
-```
-
-Press **▶ Play "G-10 monsoon" story** on the dashboard. See [`docs/DEMO_SCRIPT.md`](docs/DEMO_SCRIPT.md) for the walkthrough.
+On the dashboard, choose **Demo story** to replay the scripted storm. See [`docs/DEMO_SCRIPT.md`](docs/DEMO_SCRIPT.md) for the walkthrough.
 
 ### Live weather vs demo story
 The FastAPI backend starts in **live mode** (`WEATHER_SOURCE=live`):
@@ -101,7 +96,7 @@ The FastAPI backend starts in **live mode** (`WEATHER_SOURCE=live`):
 - Rain alone raises yellow / orange / red at **10 / 25 / 50 mm/h** (`WEATHER_ALERT_MM`), using whichever is higher, now or the next hour.
 - **PMD has no public API.** Official PMD alerts are entered by the duty officer on the dashboard (*Signal feeds → Enter PMD alert*). They last 6 hours, are recorded in the audit log, and never override measured rain.
 - If Open-Meteo can't be reached, the dashboard says so. Rain older than 30 minutes is ignored rather than shown as current.
-- **▶ Demo story** switches to the scripted G-10 monsoon evening; **🌐 Live** switches back. Traffic, SMS and dispatch remain simulated in both modes.
+- **Demo story** switches to the scripted G-10 monsoon evening; **Live** switches back. Traffic, SMS and dispatch remain simulated in both modes.
 - Open-Meteo's free tier is for non-commercial use (attribution shown in the UI). Commercial deployments need their paid plan.
 
 ### Turn on Gemini (Google AI Studio)
@@ -111,11 +106,15 @@ The FastAPI backend starts in **live mode** (`WEATHER_SOURCE=live`):
 
 Gemini then reads every citizen report, including the photo, and re-judges each incident. Its score is blended with the deterministic rule engine and **clamped to ±15 points**, and both are shown. Without a key, or if the call fails or times out, everything runs on the offline engines, so a demo never breaks on bad Wi-Fi.
 
-## Test (Node)
-```bash
-npm test
-```
-There are 8 tests: report understanding, every fusion rule property (a single report can't trigger a response, duplicates count once, corroboration, expiry), the **full end-to-end story** (detect → plan → execute → measurable improvement → crews drain → resolve → roads reopen), and the HTTP API. The Node prototype still uses a demo PIN; only the FastAPI backend has accounts.
+## Tests
+`python -m pytest` in `backend/` covers:
+- report understanding and every fusion-rule property: a single report can't trigger a response, duplicates count once, corroboration, expiry
+- the **full end-to-end story**: detect → plan → execute → measurable improvement → crews drain → resolve → roads reopen
+- the HTTP API, live weather (with faked responses) and security: auth, roles, rate limits, CSRF, headers, uploads, step-up confirmation
+- memory and payload bounds
+- with `NIKAASI_TEST_DATABASE_URL` set: PostgreSQL persistence and retention
+
+The original Node.js prototype was removed. It's still in git history.
 
 ## Checkpoint deliverables
 | Checkpoint | Where |
@@ -125,14 +124,14 @@ There are 8 tests: report understanding, every fusion rule property (a single re
 | 2 · Google Stitch screens | prompts in [`docs/STITCH_PROMPTS.md`](docs/STITCH_PROMPTS.md) (run them in Stitch) |
 | 2 · Architecture diagram | [`docs/architecture.drawio`](docs/architecture.drawio) (open in draw.io) + Mermaid version in ARCHITECTURE.md |
 | 3 · Citizen flow + mock feeds | `public/citizen.html`, `GET /api/feeds/weather`, `GET /api/feeds/traffic` |
-| 3 · AI fusion (Google AI Studio) | `src/fusion.js`, `src/gemini.js`, `src/nlp.js` |
-| 3 · Response planning + simulation | `src/planner.js`, `src/engine.js`, `src/traffic.js` |
+| 3 · AI fusion (Google AI Studio) | `backend/app/fusion.py`, `backend/app/gemini.py`, `backend/app/nlp.py` |
+| 3 · Response planning + simulation | `backend/app/planner.py`, `backend/app/engine.py`, `backend/app/traffic.py` |
 | 3 · Authority dashboard | `public/authority.html` |
-| 4 · End-to-end test + demo | `test/e2e.test.js`, `docs/DEMO_SCRIPT.md` |
+| 4 · End-to-end test + demo | `backend/tests/test_e2e.py`, `docs/DEMO_SCRIPT.md` |
 
 ## Honest limits
 - The map is a **schematic** of 12 sectors, not real road geometry. Sector centres are approximate and only used to snap a GPS fix.
 - **Rain is live** (Open-Meteo); PMD alerts are entered by hand because PMD has no API. **Traffic is simulated** from the same world model, so it reacts to the flooding and to the response. Live traffic would need a provider such as Google Maps or ITP data.
 - Alerts and tickets are simulated (no SMS gateway, no CDA system).
-- With PostgreSQL, records are kept across restarts, but a restart still begins a fresh simulation: past runs are history, not resumed. The Node backend keeps everything in memory.
-- The Node prototype only has a shared demo PIN and no accounts. Use the FastAPI backend for anything beyond a local demo.
+- With PostgreSQL, records are kept across restarts, but a restart still begins a fresh simulation: past runs are history, not resumed.
+- Personal data in reports (photo, exact GPS, name, device id) is removed after `DATA_RETENTION_DAYS` (default 90). Report text stays for the record.

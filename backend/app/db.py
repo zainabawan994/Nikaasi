@@ -21,7 +21,7 @@ import queue
 import re
 import threading
 import uuid
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 from sqlalchemy import (Boolean, CheckConstraint, Column, DateTime, Float, ForeignKey, Integer, LargeBinary, MetaData, String, Table, Text,
                         UniqueConstraint, create_engine, func, select)
@@ -322,6 +322,32 @@ class Store:
     def save_event(self, e: dict) -> None:
         self._put(events.insert().values(run_id=self.run_id, sim_min=e["simMin"], clock=e["clock"], type=e["type"],
                                          sector=e["sector"], text=e["text"], created_at=_now()))
+
+    # ------------------------------------------------------------- retention
+    def purge_personal_data(self, days: int) -> int:
+        """Remove photos, exact GPS, names and device ids from reports older than `days` (text stays)."""
+        if not self.enabled or days <= 0:
+            return 0
+        from sqlalchemy import or_, update
+        cutoff = datetime.now(timezone.utc) - timedelta(days=days)
+        stmt = (update(reports).where(reports.c.created_at < cutoff,
+                                      or_(reports.c.photo.isnot(None), reports.c.lat.isnot(None),
+                                          reports.c.name.isnot(None), reports.c.reporter_id.isnot(None)))
+                .values(photo=None, photo_mime=None, lat=None, lng=None, name=None, reporter_id=None))
+        with self.engine.begin() as c:
+            return c.execute(stmt).rowcount or 0
+
+    def get_photo(self, code: str) -> str | None:
+        """A report photo from the current run as a data URL (fallback when evicted from memory)."""
+        if not self.enabled or not self.run_id:
+            return None
+        self.flush(2)
+        with self.engine.connect() as c:
+            row = c.execute(select(reports.c.photo, reports.c.photo_mime)
+                            .where(reports.c.run_id == self.run_id, reports.c.code == code)).first()
+        if not row or row.photo is None:
+            return None
+        return f"data:{row.photo_mime};base64,{base64.b64encode(row.photo).decode()}"
 
     # ------------------------------------------------------------- reads (blocking; call via asyncio.to_thread)
     def status(self) -> dict:

@@ -31,6 +31,15 @@ PKT = timezone(timedelta(hours=5))  # Pakistan has no daylight saving
 LIVE_TICK_S = 60                 # live mode: one simulated minute per real minute
 LIVE_STALE_MIN = 30              # ignore live rain data older than this
 PMD_ALERT_HOURS = 6              # officer-entered PMD alerts expire after this
+# memory / payload bounds for a server that runs all season (older data lives in PostgreSQL)
+KEEP_RESOLVED_INCIDENTS = 100    # in memory
+SEND_RESOLVED_INCIDENTS = 20     # to staff screens
+FULL_DETAIL_RESOLVED = 3         # resolved incidents that keep road snapshots in the payload
+KEEP_TICKETS = 300
+KEEP_BROADCASTS = 200
+KEEP_REPORTS = 500
+KEEP_PHOTOS = 200                # ~1.5 MB each at most
+TRAIL_SEND_RESOLVED = 40
 PUMP_RATE = 5                   # cm/min removed by a drain crew on site
 MAX_DEPTH = 60
 
@@ -211,12 +220,32 @@ class Engine:
         self.update_weather()
         self.update_hydrology()
         self.traffic_now = traffic.simulate(self.world, self.depth, self.closed, self.informed)
-        self.shadow = traffic.simulate(self.world, self.shadow_depth) if any(i["execution"] for i in self.incidents) else None
+        self.shadow = (traffic.simulate(self.world, self.shadow_depth)
+                       if any(i["execution"] and i["status"] != "resolved" for i in self.incidents) else None)
         self.record_traffic()
         self.fuse_all()
         self.manage_incidents()
         self.progress_tickets()
+        self.prune()
         self.emit()
+
+    def prune(self) -> None:
+        """Keep memory bounded on a long-running server; everything pruned is already in PostgreSQL."""
+        resolved = sorted((i for i in self.incidents if i["status"] == "resolved"), key=lambda i: i.get("resolvedAt") or 0)
+        if len(resolved) > KEEP_RESOLVED_INCIDENTS:
+            drop = {i["id"] for i in resolved[:len(resolved) - KEEP_RESOLVED_INCIDENTS]}
+            self.incidents = [i for i in self.incidents if i["id"] not in drop]
+        live_ids = {i["id"] for i in self.incidents}
+        if len(self.tickets) > KEEP_TICKETS:
+            done = [t for t in self.tickets if t["status"] == "Resolved" or t["incidentId"] not in live_ids]
+            excess = set(id(t) for t in done[:len(self.tickets) - KEEP_TICKETS])
+            self.tickets = [t for t in self.tickets if id(t) not in excess]
+        del self.broadcasts[:-KEEP_BROADCASTS]
+        del self.reports[:-KEEP_REPORTS]
+
+    def photo(self, rid: str) -> str | None:
+        """Photo data URL from memory, else from PostgreSQL (older photos are evicted from memory)."""
+        return self.photos.get(rid) or self.store.get_photo(rid)
 
     def run_script(self) -> None:
         if not self.scenario:
@@ -335,6 +364,8 @@ class Engine:
         rid = f"R-{self.seq['rep']:04d}"
         if photo:
             self.photos[rid] = photo
+            while len(self.photos) > KEEP_PHOTOS:  # evict the oldest (dicts keep insertion order)
+                del self.photos[next(iter(self.photos))]
         report = {
             "id": rid, "sector": sector, "reporterId": str(reporter_id or rid)[:64], "name": str(name or "Resident")[:40],
             "text": text, "hasPhoto": bool(photo), "t": self.sim_min, "clock": self.clock(), "ai": ai, "bot": bot,
@@ -765,18 +796,28 @@ class Engine:
         }
         if not authority:
             return base
+        active = [i for i in self.incidents if i["status"] != "resolved"]
+        resolved = sorted((i for i in self.incidents if i["status"] == "resolved"),
+                          key=lambda i: i.get("resolvedAt") or 0, reverse=True)[:SEND_RESOLVED_INCIDENTS]
         incidents = []
-        for i in self.incidents:
+        for n, i in enumerate(active + resolved):
             d = dict(i)
             d["assessment"] = self.public_assessment(i["sector"]) if i.get("assessment") else None
+            if i["status"] == "resolved":
+                d["trail"] = i["trail"][-TRAIL_SEND_RESOLVED:]
+                if i.get("execution") and n - len(active) >= FULL_DETAIL_RESOLVED:
+                    ex = dict(i["execution"])
+                    ex["before"] = {k: v for k, v in ex["before"].items() if k != "links"}
+                    d["execution"] = ex
             incidents.append(d)
+        sent = {i["id"] for i in incidents}
         return {
             **base,
             "shadow": ({k: self.shadow[k] for k in ("links", "sectors", "metrics")} if self.shadow else None),
             "truth": {"depth": {k: round(v, 1) for k, v in self.depth.items()},
                       "shadowDepth": {k: round(v, 1) for k, v in self.shadow_depth.items()}},
             "incidents": incidents,
-            "tickets": self.tickets,
+            "tickets": [t for t in self.tickets if t["incidentId"] in sent],
             "trafficHistory": {k: [x["tti"] for x in h[-30:]] for k, h in self.traffic_history.items()},
             "reports": [{k: v for k, v in r.items() if k != "position"} for r in self.reports[-60:]],
             "events": self.events[-80:],

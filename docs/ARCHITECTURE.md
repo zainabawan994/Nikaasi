@@ -47,15 +47,16 @@ A draw.io version of this diagram is in [`architecture.drawio`](architecture.dra
 ## Components (code map)
 | Module | Responsibility |
 |---|---|
-| `src/config.js` | Schematic world: 12 sectors (F/G/H × 11/10/9/8), 79 roads, G-10 underpass, depots, resident registry |
-| `src/scenario.js` | "G-10 monsoon evening" script (storm + bot reports) |
-| `src/nlp.js` | Offline report interpreter (English / Roman Urdu / Urdu cues, negation, intensity) |
-| `src/gemini.js` | Google AI Studio Gemini adapter: report triage (text + photo) and incident judge, JSON mode, timeout + fallback |
-| `src/fusion.js` | **Severity rule** (below) |
-| `src/planner.js` | Builds actions from what is *observable* (never the hidden ground truth), picks nearest depot by live travel time, predicts impact |
-| `src/traffic.js` | BPR volume-delay, 4-step incremental assignment, flooded capacity, informed vs uninformed drivers, exposure metrics |
-| `src/engine.js` | Clock, feeds, hydrology, incident lifecycle, execution, tickets, alerts, counterfactual "no response" world |
-| `server.js` | Zero-dependency HTTP + Server-Sent Events API |
+| `backend/app/config.py` | Schematic world: 12 sectors (F/G/H × 11/10/9/8), 79 roads, G-10 underpass, depots, resident registry |
+| `backend/app/scenario.py` | "G-10 monsoon evening" script (storm + bot reports) |
+| `backend/app/nlp.py` | Offline report interpreter (English / Roman Urdu / Urdu cues, negation, intensity) |
+| `backend/app/gemini.py` | Google AI Studio Gemini adapter: report triage (text + photo) and incident judge, JSON mode, timeout + fallback |
+| `backend/app/fusion.py` | **Severity rule** (below) |
+| `backend/app/planner.py` | Builds actions from what is *observable* (never the hidden ground truth), picks nearest depot by live travel time, predicts impact |
+| `backend/app/traffic.py` | BPR volume-delay, 4-step incremental assignment, flooded capacity, informed vs uninformed drivers, exposure metrics |
+| `backend/app/engine.py` | Clock, feeds, hydrology, incident lifecycle, execution, tickets, alerts, counterfactual "no response" world |
+| `backend/app/main.py` | FastAPI routes, auth, rate limits, Server-Sent Events, static frontend |
+| `backend/app/db.py` · `auth.py` · `security.py` | PostgreSQL store and retention · accounts and sessions · hardening |
 | `public/` | Landing, citizen app, authority dashboard, shared SVG map renderer |
 
 ## Severity-judgment rule (rules-v1)

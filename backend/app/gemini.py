@@ -24,9 +24,9 @@ def model() -> str:
     return os.environ.get("GEMINI_MODEL", "gemini-3.5-flash")
 
 
-async def generate_json(parts: list[dict], timeout: float = 20.0, temperature: float = 0.2) -> dict:
+async def generate_json(parts: list[dict], timeout: float = 20.0, temperature: float = 0.2, retries: int = 1) -> dict:
     async with httpx.AsyncClient(timeout=timeout) as client:
-        for attempt in range(2):
+        for attempt in range(retries + 1):
             res = await client.post(
                 f"{API}/{model()}:generateContent",
                 headers={"x-goog-api-key": os.environ["GEMINI_API_KEY"]},
@@ -34,7 +34,7 @@ async def generate_json(parts: list[dict], timeout: float = 20.0, temperature: f
                       "generationConfig": {"temperature": temperature, "responseMimeType": "application/json"}},
             )
             # Google returns 503 "high demand" / 429 in short bursts: retry once
-            if res.status_code not in (429, 503) or attempt == 1:
+            if res.status_code not in (429, 503) or attempt == retries:
                 break
             await asyncio.sleep(2)
     if res.status_code != 200:
@@ -63,7 +63,8 @@ async def interpret_report(text: str, photo_data_url: str | None) -> dict:
     m = re.match(r"^data:(image/[a-z+]+);base64,(.+)$", photo_data_url or "", re.IGNORECASE | re.DOTALL)
     if m:
         parts.append({"inline_data": {"mime_type": m.group(1), "data": m.group(2)}})
-    j = await generate_json(parts)
+    # a citizen is waiting for this answer: short timeout, no retry, then the offline lexicon takes over
+    j = await generate_json(parts, timeout=float(os.environ.get("GEMINI_REPORT_TIMEOUT_S", "6")), retries=0)
     return {
         "floodEvidence": _clamp01(j.get("floodEvidence")),
         "depth": j.get("depth") if isinstance(j.get("depth"), str) else "unknown",

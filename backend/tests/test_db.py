@@ -105,3 +105,25 @@ def test_unreachable_database_falls_back_to_memory():
     with TestClient(create_app(e)) as c:
         sign_in(c, "authority")  # accounts fall back to memory too
         assert c.get("/api/history/runs").status_code == 503
+
+
+def test_photo_fallback_and_retention_purge(store):
+    import base64
+    from datetime import datetime, timedelta, timezone
+    from sqlalchemy import update
+    from app import engine as engine_mod
+    e = Engine(store=store)
+    jpg = "data:image/jpeg;base64," + base64.b64encode(b"\xff\xd8\xff\xe0" + b"1" * 40).decode()
+    r = e.ingest_report(sector="G-10", reporter_id="dev-1", name="Imran", text="pani hai", ai=engine_mod.nlp.interpret("pani hai"),
+                        photo=jpg, position={"lat": 33.676, "lng": 73.015})
+    e.photos.clear()                      # evicted from memory
+    assert e.photo(r["id"]) == jpg, "older photos are served from PostgreSQL"
+    store.flush()
+    with store.engine.begin() as c:       # age the report past the retention window
+        c.execute(update(db.reports).values(created_at=datetime.now(timezone.utc) - timedelta(days=100)))
+    assert store.purge_personal_data(90) == 1
+    with store.engine.connect() as c:
+        row = c.execute(select(db.reports)).mappings().one()
+    assert row["photo"] is None and row["lat"] is None and row["name"] is None and row["reporter_id"] is None
+    assert row["text"] == "pani hai", "the report text stays for the record"
+    assert store.purge_personal_data(90) == 0, "idempotent"

@@ -1,6 +1,6 @@
 # Nikaasi — Security
 
-This covers the FastAPI backend (`backend/`), which is the full-stack version. The Node prototype (`server.js`) is a demo only: it still uses a shared PIN and must not be exposed.
+This covers the Nikaasi backend (`backend/`, FastAPI). The original Node.js prototype, which used a shared PIN, has been removed.
 
 ## Roles
 
@@ -40,7 +40,10 @@ There is always at least one active admin: the API refuses to demote or disable 
 | Host header | Only `localhost`, `127.0.0.1` and the hosts in `DOMAIN` / `ALLOWED_HOSTS` are accepted (400 otherwise): blocks Host-header spoofing and DNS rebinding |
 | Admin step-up | Creating users and changing a role, status or password require the admin's **own password again** (`confirmPassword`). Failed confirmations count towards the account lockout and are audited. Admins cannot demote or disable themselves |
 | Abuse | One vote per reporter in the severity rule, so repeated reports from one device don't raise severity |
-| Privacy | Citizen photos are only served to signed-in users; GPS positions are never sent to browsers |
+| Privacy | Citizen photos are only served to signed-in users; GPS positions are never sent to browsers. Photo metadata (EXIF incl. GPS, XMP, comments) is stripped on upload. Citizens see a notice before sending, and `/privacy.html` explains the data use, including Google Gemini |
+| Data retention | Daily job removes photos, exact GPS, names and device ids from reports older than `DATA_RETENTION_DAYS` (default 90); report text stays. Each purge is audited |
+| Resource bounds | In memory: at most 100 resolved incidents, 300 tickets, 200 alerts, 500 reports, 200 photos (older ones come from PostgreSQL). Staff screens get active incidents plus the 20 latest resolved, so the live payload stays flat however long the server runs |
+| Dependencies | Runtime versions pinned in `backend/requirements.txt`; test tools in `requirements-dev.txt` (not in the image). `python -m pip_audit -r requirements.txt` shows no known vulnerabilities (Starlette upgraded to 1.3.1, anyio 4.14.2, certifi 2026.10.18) |
 | Errors | Unexpected errors return a generic message; details go to the server log only. Database connection errors are not shown to the browser |
 | Production mode | `APP_ENV=production` disables `/docs` and `/openapi.json`, turns on secure cookies and HSTS |
 | Audit log | Sign-ins (ok/failed/blocked), sign-outs, user changes, password changes, plan executions, scenario control, weather overrides and setting changes, with user, time and IP. Passwords never appear in it |

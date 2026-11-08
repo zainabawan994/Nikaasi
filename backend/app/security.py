@@ -160,7 +160,67 @@ def validate_photo(data_url: str | None) -> str | None:
         raise ValueError("Photo too large (max 1.5 MB)")
     if not raw.startswith(_MAGIC[mime]) or (mime == "image/webp" and raw[8:12] != b"WEBP"):
         raise ValueError("Photo content does not match its type")
-    return f"data:{mime};base64,{b64}"
+    clean = strip_metadata(raw, mime)  # removes EXIF GPS, camera serials, XMP, comments
+    return f"data:{mime};base64,{base64.b64encode(clean).decode()}"
+
+
+def strip_metadata(raw: bytes, mime: str) -> bytes:
+    """Drop metadata blocks (EXIF incl. GPS, XMP, ICC-free comments) without re-encoding the image."""
+    try:
+        if mime == "image/jpeg":
+            return _strip_jpeg(raw)
+        if mime == "image/png":
+            return _strip_png(raw)
+        if mime == "image/webp":
+            return _strip_webp(raw)
+    except (IndexError, ValueError):
+        raise ValueError("Photo could not be read") from None
+    return raw
+
+
+def _strip_jpeg(raw: bytes) -> bytes:
+    out, i = bytearray(raw[:2]), 2
+    while i < len(raw):
+        if raw[i] != 0xFF:
+            raise ValueError("bad JPEG")
+        marker = raw[i + 1]
+        if marker == 0xDA:  # start of scan: the rest is image data
+            out += raw[i:]
+            return bytes(out)
+        if marker in (0xD8, 0x01) or 0xD0 <= marker <= 0xD7:
+            out += raw[i:i + 2]
+            i += 2
+            continue
+        seg_len = int.from_bytes(raw[i + 2:i + 4], "big")
+        seg = raw[i:i + 2 + seg_len]
+        # keep APP0 (JFIF) and APP2 (colour profile); drop APP1 (EXIF/XMP), APP3-APP15 and comments
+        if not (0xE1 == marker or 0xE3 <= marker <= 0xEF or marker == 0xFE):
+            out += seg
+        i += 2 + seg_len
+    return bytes(out)
+
+
+def _strip_png(raw: bytes) -> bytes:
+    out, i = bytearray(raw[:8]), 8
+    while i < len(raw):
+        n = int.from_bytes(raw[i:i + 4], "big")
+        kind = raw[i + 4:i + 8]
+        chunk = raw[i:i + 12 + n]
+        if kind not in (b"eXIf", b"tEXt", b"iTXt", b"zTXt", b"tIME"):
+            out += chunk
+        i += 12 + n
+    return bytes(out)
+
+
+def _strip_webp(raw: bytes) -> bytes:
+    body, i = bytearray(), 12
+    while i + 8 <= len(raw):
+        kind, n = raw[i:i + 4], int.from_bytes(raw[i + 4:i + 8], "little")
+        chunk = raw[i:i + 8 + n + (n & 1)]
+        if kind not in (b"EXIF", b"XMP "):
+            body += chunk
+        i += 8 + n + (n & 1)
+    return b"RIFF" + (len(body) + 4).to_bytes(4, "little") + b"WEBP" + bytes(body)
 
 
 # ------------------------------------------------------------------ middleware
