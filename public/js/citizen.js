@@ -43,7 +43,7 @@
     const a = state.sectors[sector];
     $('st-sector').textContent = sector;
     $('st-sev').className = `sev sev-${a.severity}`;
-    $('st-sev').textContent = a.severity;
+    $('st-sev').textContent = { Watch: 'Normal', Moderate: 'Watch out', High: 'Flooding', Critical: 'Danger' }[a.severity];
     $('status').className = `status-card s-${a.severity}`;
     const w = state.weather[sector];
     const closures = state.closed.map((id) => world.links.find((l) => l.id === id)).filter((l) => l && l.sectors.includes(sector)).map((l) => l.name);
@@ -53,7 +53,7 @@
       High: 'Flooding confirmed. Avoid low roads and underpasses.',
       Critical: 'Severe flooding. Stay indoors if you can. Emergency: 1122.',
     };
-    $('st-text').innerHTML = `${msgs[a.severity]}<br>🌧 ${w.rainMmHr} mm/h${w.alert !== 'none' ? ` · <b>${w.alert.toUpperCase()} alert</b>` : ''}${closures.length ? `<br>⛔ Closed: ${esc([...new Set(closures)].join(', '))}` : ''}`;
+    $('st-text').innerHTML = `${msgs[a.severity]}<br>Rain ${w.rainMmHr} mm/h${w.alert !== 'none' ? ` · <b>${w.alert.toUpperCase()} alert</b>` : ''}${closures.length ? `<br>Closed roads: ${esc([...new Set(closures)].join(', '))}` : ''}`;
   }
 
   function renderInbox() {
@@ -76,15 +76,15 @@
 
   $('gps').addEventListener('click', () => {
     if (!navigator.geolocation) { $('err').textContent = 'GPS not available — pick your sector instead.'; return; }
-    $('gps').textContent = '⏳';
+    $('gps').textContent = 'Locating…';
     navigator.geolocation.getCurrentPosition((p) => {
-      $('gps').textContent = '📍 GPS';
+      $('gps').textContent = 'Use GPS';
       gps = { lat: p.coords.latitude, lng: p.coords.longitude };
       // snap client-side for the UI; server snaps again
       let best = null, bd = Infinity;
       Object.values(world.sectors).forEach((s) => { const d = Math.hypot(s.latlng[0] - gps.lat, s.latlng[1] - gps.lng); if (d < bd) { bd = d; best = s.id; } });
       if (bd < 0.03) { setSector(best); pin = null; draw(); $('err').textContent = ''; } else { $('err').textContent = 'You seem to be outside the covered sectors — please pick one.'; gps = null; }
-    }, () => { $('gps').textContent = '📍 GPS'; $('err').textContent = 'Could not get location — pick your sector instead.'; }, { timeout: 8000 });
+    }, () => { $('gps').textContent = 'Use GPS'; $('err').textContent = 'Could not get location — pick your sector instead.'; }, { timeout: 8000 });
   });
 
   $('photo').addEventListener('change', async (e) => {
@@ -140,7 +140,7 @@
     const el = $('result');
     el.classList.remove('hidden');
     el.innerHTML = `
-      <h3>✅ Report ${report.id} received <span class="right small muted">${report.clock}</span></h3>
+      <h3>Report ${report.id} received <span class="right small muted">${report.clock}</span></h3>
       <div style="margin:4px 0 10px"><b>${esc(report.ai.summary)}</b></div>
       <div class="explain small">
         ${incidentId

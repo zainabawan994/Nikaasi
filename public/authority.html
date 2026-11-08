@@ -6,7 +6,7 @@
   <meta name="robots" content="noindex, nofollow">
   <title>Nikaasi Command</title>
   <link rel="icon" href="assets/logo.svg">
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700&family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="css/style.css">
 </head>
 <body>
@@ -17,14 +17,14 @@
       <span class="badge dark live" id="run-badge"><span class="dot"></span>paused</span>
       <span class="badge dark" id="ai-badge">AI</span>
       <span class="spacer"></span>
-      <button class="btn primary" id="live-btn" title="Real-time mode with live rainfall">🌐 Live</button>
-      <button class="btn ghost" id="play">▶ Demo story</button>
-      <button class="btn ghost" id="pause">⏸ Pause</button>
+      <button class="btn primary" id="live-btn" title="Real-time mode with live rainfall">Live</button>
+      <button class="btn ghost" id="play">Demo story</button>
+      <button class="btn ghost" id="pause">Pause</button>
       <button class="btn ghost" id="step" title="Advance one simulated minute">+1 min</button>
       <select class="ghost" id="speed" aria-label="Simulation speed">
         <option value="1">1×</option><option value="2">2×</option><option value="4">4×</option><option value="8">8×</option>
       </select>
-      <button class="btn ghost" id="reset">↺ Reset</button>
+      <button class="btn ghost" id="reset">Reset</button>
       <label class="switch" style="color:#fff;margin:0"><input type="checkbox" id="auto"> Auto-execute plans</label>
       <span class="badge dark" id="user-chip"></span>
       <a class="btn ghost hidden" id="admin-link" href="admin.html">Users</a>
@@ -37,7 +37,7 @@
       <section class="grid main" style="margin-top:16px">
         <div class="grid">
           <div class="card">
-            <h3>🗺 Live zone map</h3>
+            <h3>Live zone map</h3>
             <div class="map-wrap"><svg class="map" id="map"></svg></div>
             <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px">
               <div id="legend"></div>
@@ -46,14 +46,14 @@
           </div>
 
           <div class="card">
-            <h3>📊 Response impact: before vs after <span class="right small muted" id="impact-sub"></span></h3>
+            <h3>Response impact: before vs after <span class="right small muted" id="impact-sub"></span></h3>
             <div id="impact"></div>
           </div>
         </div>
 
         <div class="grid">
           <div class="card">
-            <h3>🚨 Incidents <span class="right small muted" id="inc-count"></span></h3>
+            <h3>Incidents <span class="right small muted" id="inc-count"></span></h3>
             <div class="inc-list" id="incidents"></div>
           </div>
           <div class="card" id="detail"></div>
@@ -62,11 +62,11 @@
 
       <section class="grid row3" style="margin-top:16px">
         <div class="card">
-          <h3>🧠 Reasoning trail <span class="right small muted" id="trail-sub"></span></h3>
+          <h3>Reasoning trail <span class="right small muted" id="trail-sub"></span></h3>
           <ul class="timeline" id="trail"></ul>
         </div>
         <div class="card">
-          <h3>📡 Signal feeds</h3>
+          <h3>Signal feeds</h3>
           <div class="small muted" id="wx-source" style="margin:-4px 0 8px"></div>
           <div style="max-height:250px;overflow:auto"><table class="tbl" id="feeds"></table></div>
           <details style="margin-top:10px">
@@ -81,7 +81,7 @@
           </details>
         </div>
         <div class="card">
-          <h3>🧾 Activity log</h3>
+          <h3>Activity log</h3>
           <div class="feed" id="log"></div>
         </div>
       </section>

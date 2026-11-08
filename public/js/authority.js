@@ -67,7 +67,7 @@
     if (!arr || arr.length < 2) return '';
     const max = Math.max(2, ...arr), min = 1;
     const pts = arr.map((v, i) => `${(i / (arr.length - 1)) * w},${h - ((v - min) / (max - min)) * (h - 2) - 1}`).join(' ');
-    return `<svg width="${w}" height="${h}" viewBox="0 0 ${w} ${h}"><polyline points="${pts}" fill="none" stroke="#EE8434" stroke-width="2"/></svg>`;
+    return `<svg width="${w}" height="${h}" viewBox="0 0 ${w} ${h}"><polyline points="${pts}" fill="none" stroke="#C2571A" stroke-width="1.5"/></svg>`;
   }
 
   // ------------------------------------------------------------ draw
@@ -81,7 +81,7 @@
     $('speed').disabled = live;
     $('step').disabled = live;
     drawWeatherSource(live);
-    $('pause').textContent = state.running ? '⏸ Pause' : '▶ Resume';
+    $('pause').textContent = state.running ? 'Pause' : 'Resume';
     $('ai-badge').textContent = state.ai.enabled ? 'AI: Gemini' : 'AI: offline';
     $('auto').checked = !!state.settings.autoExecute;
     $('speed').value = String(state.speed);
@@ -155,7 +155,7 @@
 
     let html = `
       <h3>${inc ? `${inc.id} · ` : ''}Sector ${selSector} ${inc && inc.status === 'resolved' ? '<span class="status done">resolved</span>' : ''}
-        <span class="right">${state.ai.enabled && inc ? `<button class="btn" id="reassess" style="padding:3px 8px;font-size:12px">↻ Ask Gemini</button>` : ''}</span></h3>
+        <span class="right">${state.ai.enabled && inc ? `<button class="btn" id="reassess" style="padding:3px 8px;font-size:12px">Ask Gemini</button>` : ''}</span></h3>
       <div class="gauge">
         <div class="score" style="color:${window.NikaasiMap.SEV_FILL[a.severity]}">${a.score}</div>
         <div>${sevBadge(a.severity)}<div class="conf" style="margin-top:4px">${a.confidence} confidence · ${a.confidencePct}%</div>
@@ -165,23 +165,23 @@
         <span class="c" style="width:${(bd.citizen / total) * 100}%"></span><span class="w" style="width:${(bd.weather / total) * 100}%"></span>
         <span class="t" style="width:${(bd.traffic / total) * 100}%"></span><span class="b" style="width:${(bd.corroboration / total) * 100}%"></span><span class="h" style="width:${(bd.hazard / total) * 100}%"></span>
       </div>
-      <div class="stack-legend"><span><i style="background:#3E7CB1"></i>citizens ${bd.citizen}</span><span><i style="background:#13A89E"></i>weather ${bd.weather}</span><span><i style="background:#EE8434"></i>traffic ${bd.traffic}</span><span><i style="background:#6C4AB6"></i>corroboration +${bd.corroboration}</span><span><i style="background:#D7263D"></i>hazard +${bd.hazard}</span></div>
+      <div class="stack-legend"><span><i style="background:var(--water)"></i>citizens ${bd.citizen}</span><span><i style="background:#6A8D73"></i>weather ${bd.weather}</span><span><i style="background:var(--sev-high)"></i>traffic ${bd.traffic}</span><span><i style="background:#6B665C"></i>corroboration +${bd.corroboration}</span><span><i style="background:var(--sev-critical)"></i>hazard +${bd.hazard}</span></div>
       <div class="explain">${esc(a.explanation)}</div>
       <div class="signals">
-        <div class="signal"><div class="k">Citizens</div><div class="v">${c.uniqueReporters} <span class="small muted">reporters</span></div><div class="small muted">${c.withPhoto} photo · ${c.hazards.map((h) => h.replace(/_/g, ' ')).join(', ') || 'no hazards'}</div><div class="bar"><span style="width:${pct(c.score)};background:#3E7CB1"></span></div></div>
+        <div class="signal"><div class="k">Citizens</div><div class="v">${c.uniqueReporters} <span class="small muted">reporters</span></div><div class="small muted">${c.withPhoto} photo · ${c.hazards.map((h) => h.replace(/_/g, ' ')).join(', ') || 'no hazards'}</div><div class="bar"><span style="width:${pct(c.score)};background:var(--water)"></span></div></div>
         <div class="signal"><div class="k">Weather</div><div class="v">${w.rainMmHr} <span class="small muted">mm/h</span></div><div class="small muted">${w.alert === 'none' ? 'no alert' : `${w.alert.toUpperCase()} alert`}</div><div class="bar"><span style="width:${pct(w.score)}"></span></div></div>
-        <div class="signal"><div class="k">Traffic</div><div class="v">${t.spike}× <span class="small muted">${t.trend}</span></div>${sparkline(state.trafficHistory[selSector])}<div class="small muted">${t.note ? esc(t.note) : `TTI ${t.tti} vs ${t.baseline}`}</div><div class="bar"><span style="width:${pct(t.score)};background:#EE8434"></span></div></div>
+        <div class="signal"><div class="k">Traffic</div><div class="v">${t.spike}× <span class="small muted">${t.trend}</span></div>${sparkline(state.trafficHistory[selSector])}<div class="small muted">${t.note ? esc(t.note) : `TTI ${t.tti} vs ${t.baseline}`}</div><div class="bar"><span style="width:${pct(t.score)};background:var(--sev-high)"></span></div></div>
       </div>`;
 
     if (reports.length) {
       html += `<details style="margin-top:10px" open><summary class="small" style="cursor:pointer;font-weight:600">Citizen reports (${state.reports.filter((r) => r.sector === selSector).length})</summary>
-        <div class="feed" style="max-height:150px">${reports.map((r) => `<div><span class="t">${r.clock}</span><b>${esc(r.name)}</b>: “${esc(r.text)}” ${r.hasPhoto ? `<a href="/api/reports/${r.id}/photo" target="_blank" rel="noopener">📷</a>` : ''}<br><span class="muted">${esc(r.ai.summary)}</span></div>`).join('')}</div></details>`;
+        <div class="feed" style="max-height:150px">${reports.map((r) => `<div><span class="t">${r.clock}</span><b>${esc(r.name)}</b>: “${esc(r.text)}” ${r.hasPhoto ? `<a href="/api/reports/${r.id}/photo" target="_blank" rel="noopener">photo</a>` : ''}<br><span class="muted">${esc(r.ai.summary)}</span></div>`).join('')}</div></details>`;
     }
 
     if (inc && inc.plan) {
       const p = inc.plan;
-      const icons = { route: '🚦', truck: '🚛', medic: '🚑', bell: '📲' };
-      html += `<h3 style="margin-top:14px">🧭 Response plan v${p.version} <span class="sev sev-${p.severity}" style="font-size:10px">${p.severity}</span> <span class="right small muted">${p.priority}</span></h3>
+      const icons = { route: 'Traffic', truck: 'Drain', medic: 'Rescue', bell: 'Alert' };
+      html += `<h3 style="margin-top:16px">Response plan v${p.version} <span class="sev sev-${p.severity}" style="font-size:10px">${p.severity}</span> <span class="right small muted">${p.priority}</span></h3>
         <div class="actions">${p.actions.map((x) => `
           <div class="action"><div class="ico">${icons[x.icon] || '•'}</div><div class="t">${esc(x.title)}</div><span class="status ${x.status}">${x.status === 'done' ? `done ${x.executedClock || ''}` : 'proposed'}</span>
           <div class="d">${esc(x.detail)}${x.message ? `<div class="alert-msg">${esc(x.message.en)}<br><span class="muted">${esc(x.message.ur)}</span></div>` : ''}</div></div>`).join('')}
@@ -191,13 +191,13 @@
           <div>Into floodwater<b>${p.prediction.exposurePerHr.before.toLocaleString('en-US')} → ${p.prediction.exposurePerHr.after.toLocaleString('en-US')}/h</b></div>
           <div>Est. depth<b>~${p.prediction.depthGuessCm} cm</b></div>
         </div>
-        ${waiting(inc) ? `<button class="btn ${RANK[p.severity] >= 3 ? 'danger' : 'primary'}" id="execute" style="width:100%;justify-content:center;margin-top:10px;padding:10px">▶ Approve &amp; execute ${inc.execution ? 'escalation' : 'plan'}</button>` : ''}`;
+        ${waiting(inc) ? `<button class="btn ${RANK[p.severity] >= 3 ? 'danger' : 'primary'}" id="execute" style="width:100%;justify-content:center;margin-top:10px;padding:10px">Approve &amp; execute ${inc.execution ? 'escalation' : 'plan'}</button>` : ''}`;
     } else if (!inc) {
       html += `<div class="empty">No incident for ${selSector}.</div>`;
     }
 
     if (tickets.length) {
-      html += `<h3 style="margin-top:14px">🎫 Dispatch tickets</h3><div class="tickets">${tickets.map((tk) => {
+      html += `<h3 style="margin-top:16px">Dispatch tickets</h3><div class="tickets">${tickets.map((tk) => {
         const idx = STEPS.findIndex((s) => tk.status.startsWith(s));
         return `<div class="ticket"><b class="mono">${tk.id}</b> · ${esc(tk.team)} · ${tk.priority} <span class="status ${tk.status === 'Resolved' ? 'done' : ''}" style="float:right">${esc(tk.status)}</span>
           <div class="steps">${STEPS.map((s, i) => `<span class="${i <= idx ? 'on' : ''}" title="${s}"></span>`).join('')}</div>
@@ -207,7 +207,7 @@
 
     const bcs = inc ? state.broadcasts.filter((b) => b.incidentId === inc.id) : [];
     if (bcs.length) {
-      html += `<h3 style="margin-top:14px">📲 Resident alerts sent</h3>${bcs.map((b) => `<div class="small" style="margin-bottom:4px"><b>${b.id}</b> ${b.clock} → ${b.sectors.join(', ')}: ${b.delivered.toLocaleString('en-US')} delivered, ${b.failed} failed</div>`).join('')}`;
+      html += `<h3 style="margin-top:16px">Resident alerts sent</h3>${bcs.map((b) => `<div class="small" style="margin-bottom:4px"><b>${b.id}</b> ${b.clock} → ${b.sectors.join(', ')}: ${b.delivered.toLocaleString('en-US')} delivered, ${b.failed} failed</div>`).join('')}`;
     }
 
     $('detail').innerHTML = html;
@@ -231,9 +231,9 @@
     const now = state.traffic, sh = state.shadow;
     el.innerHTML = `
       <div class="grid mini-maps">
-        <div><h4>⏱ At decision (${ex.executedClock})</h4><svg class="map" id="mm-before"></svg></div>
-        <div><h4>✅ Now: with Nikaasi response</h4><svg class="map" id="mm-now"></svg></div>
-        <div><h4>⚠ Now: if nobody had acted</h4><svg class="map" id="mm-shadow"></svg></div>
+        <div><h4>At decision (${ex.executedClock})</h4><svg class="map" id="mm-before"></svg></div>
+        <div><h4>Now, with response</h4><svg class="map" id="mm-now"></svg></div>
+        <div><h4>Now, if nobody acted</h4><svg class="map" id="mm-shadow"></svg></div>
       </div>
       <table class="tbl" style="margin-top:10px">
         <tr><th>Metric</th><th>At decision</th><th>Now (with response)</th><th>No response</th></tr>
@@ -279,7 +279,7 @@
     const pmd = Object.entries(ws.pmdAlerts || {}).map(([s, a]) => `${s} ${a.level.toUpperCase()} (by ${esc(a.by)}, until ${a.until})`);
     $('wx-source').innerHTML = !live
       ? 'Demo: scripted storm and mock PMD alerts.'
-      : `${ws.ok ? '🟢' : '🔴'} Rain: <b>${esc(ws.provider)}</b> live${ws.fetchedAt ? `, updated ${ws.fetchedAt}` : ''}${ws.ok ? '' : ' (unavailable, retrying)'}`
+      : `<span class="${ws.ok ? 'ok-mark' : 'bad-mark'}"></span>Rain: <b>${esc(ws.provider)}</b> live${ws.fetchedAt ? `, updated ${ws.fetchedAt}` : ''}${ws.ok ? '' : ' (unavailable, retrying)'}`
         + ` · auto alert at ${(ws.thresholdsMmHr || []).join('/')} mm/h`
         + `<br>PMD alerts: ${pmd.length ? pmd.join(', ') : 'none entered'}`
         + `<br><span style="font-size:10px">${esc(ws.attribution || '')}</span>`;

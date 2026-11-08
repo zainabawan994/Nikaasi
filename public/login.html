@@ -6,21 +6,22 @@
   <meta name="robots" content="noindex, nofollow">
   <title>Sign in · Nikaasi</title>
   <link rel="icon" href="assets/logo.svg">
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700&family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="css/style.css">
 </head>
 <body>
   <div class="gate">
     <form class="card" id="login-form" novalidate>
       <img src="assets/logo.svg" alt="">
-      <h2 style="margin:8px 0 14px">Nikaasi Command</h2>
+      <h2 style="margin:10px 0 6px">Nikaasi Command</h2>
+      <p class="small muted" style="margin:0 0 4px">Staff sign-in</p>
       <label for="email" style="text-align:left">Email</label>
       <input type="text" id="email" autocomplete="username" inputmode="email" required>
       <label for="password" style="text-align:left">Password</label>
       <input type="password" id="password" autocomplete="current-password" required>
       <button class="btn primary" id="submit" style="width:100%;justify-content:center;margin-top:14px">Sign in</button>
       <div id="err" class="small" role="alert" style="color:var(--sev-critical);margin-top:10px;min-height:18px"></div>
-      <a href="/" class="small">← Back</a>
+      <a href="/" class="small">Back to Nikaasi</a>
     </form>
   </div>
   <script src="js/login.js"></script>

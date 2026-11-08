@@ -6,7 +6,7 @@
   <meta name="robots" content="noindex, nofollow">
   <title>Users · Nikaasi</title>
   <link rel="icon" href="assets/logo.svg">
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700&family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="css/style.css">
 </head>
 <body>
@@ -21,14 +21,14 @@
 
     <div class="wrap grid" style="max-width:1100px">
       <section class="card">
-        <h3>👥 Users</h3>
+        <h3>Users</h3>
         <div style="overflow-x:auto"><table class="tbl" id="users"></table></div>
         <div id="users-msg" class="small" role="status" style="margin-top:8px"></div>
       </section>
 
       <section class="grid row3" style="grid-template-columns:repeat(auto-fit,minmax(300px,1fr))">
         <form class="card" id="create-form" novalidate>
-          <h3>➕ Add user</h3>
+          <h3>Add user</h3>
           <label for="c-email">Email</label><input type="text" id="c-email" autocomplete="off" required>
           <label for="c-name">Name</label><input type="text" id="c-name" autocomplete="off">
           <label for="c-role">Role</label>
@@ -39,7 +39,7 @@
         </form>
 
         <form class="card" id="pw-form" novalidate>
-          <h3>🔑 Change my password</h3>
+          <h3>Change my password</h3>
           <label for="p-cur">Current password</label><input type="password" id="p-cur" autocomplete="current-password" required>
           <label for="p-new">New password</label><input type="password" id="p-new" autocomplete="new-password" required>
           <p class="small muted">At least 10 characters, with letters and a number or symbol.</p>
@@ -48,13 +48,13 @@
         </form>
 
         <div class="card">
-          <h3>🗄 Database</h3>
+          <h3>Database</h3>
           <div id="db" class="small"></div>
         </div>
       </section>
 
       <section class="card">
-        <h3>🧾 Audit log</h3>
+        <h3>Audit log</h3>
         <div style="max-height:420px;overflow:auto"><table class="tbl" id="audit"></table></div>
       </section>
     </div>

@@ -184,6 +184,9 @@ class SecurityHeaders(BaseHTTPMiddleware):
         h.setdefault("Cross-Origin-Opener-Policy", "same-origin")
         if path.startswith("/api/"):
             h.setdefault("Cache-Control", "no-store")
+        elif path == "/" or path.endswith((".html", ".js", ".css", ".svg")):
+            # always revalidate (cheap 304 via ETag) so users get updates immediately
+            h.setdefault("Cache-Control", "no-cache")
         if self.hsts:
             h.setdefault("Strict-Transport-Security", "max-age=31536000; includeSubDomains")
         return resp

@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Nikaasi Citizen</title>
   <link rel="icon" href="assets/logo.svg">
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700&family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="css/style.css">
 </head>
 <body>
@@ -26,11 +26,11 @@
     </section>
 
     <section class="card" style="margin-top:14px">
-      <h3>📣 Report flooding</h3>
+      <h3>Report flooding</h3>
       <label for="sector">Where are you?</label>
       <div style="display:flex;gap:8px">
         <select id="sector"></select>
-        <button class="btn" id="gps" type="button" title="Use my location">📍 GPS</button>
+        <button class="btn" id="gps" type="button" title="Use my location">Use GPS</button>
       </div>
       <div class="map-wrap" style="margin-top:8px"><svg class="map" id="map"></svg></div>
 
@@ -59,7 +59,7 @@
     <section class="card result hidden" id="result" style="margin-top:14px"></section>
 
     <section style="margin-top:18px" class="inbox" id="alerts">
-      <h3 style="margin-bottom:8px">🔔 Alerts for your area</h3>
+      <h3 style="margin-bottom:8px">Alerts for your area</h3>
       <div id="inbox"><div class="empty">No alerts right now. Stay safe.</div></div>
     </section>
   </main>

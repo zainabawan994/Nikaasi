@@ -20,7 +20,7 @@
       const a = st.sectors[s], w = st.weather[s] || {};
       const rain = Number(w.rainMmHr || 0);
       return `<a class="sector-tile sev-bg-${a.severity}" href="citizen.html" title="${esc(s)}: ${LABEL[a.severity]}">
-        <b>${esc(s)}</b><span>${rain > 0 ? `🌧 ${rain} mm/h` : '☀︎ dry'}</span><small>${LABEL[a.severity]}</small></a>`;
+        <b>${esc(s)}</b><span>${rain > 0 ? `${rain} mm/h` : 'Dry'}</span><small>${LABEL[a.severity]}</small></a>`;
     }).join('');
 
     const warnings = (st.broadcasts || []).slice().reverse().slice(0, 4);
