@@ -1,0 +1,71 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Nikaasi Citizen</title>
+  <link rel="icon" href="assets/logo.svg">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+  <header class="topbar">
+    <a class="brand" href="/"><img src="assets/logo.svg" alt=""><span><span class="name">Nikaasi</span><span class="tag">Citizen reporting</span></span></a>
+    <span class="spacer"></span>
+    <span class="clock" id="clock">--:--</span>
+  </header>
+
+  <main class="phone">
+    <section class="status-card s-Watch" id="status">
+      <div class="small" style="opacity:.8">Your area</div>
+      <div style="display:flex;align-items:center;gap:10px;margin:4px 0 6px">
+        <h2 id="st-sector" style="font-size:28px">G-10</h2>
+        <span class="sev sev-Watch" id="st-sev">Watch</span>
+      </div>
+      <div id="st-text" class="small" style="opacity:.92">Loading…</div>
+    </section>
+
+    <section class="card" style="margin-top:14px">
+      <h3>📣 Report flooding</h3>
+      <label for="sector">Where are you?</label>
+      <div style="display:flex;gap:8px">
+        <select id="sector"></select>
+        <button class="btn" id="gps" type="button" title="Use my location">📍 GPS</button>
+      </div>
+      <div class="small muted" style="margin-top:6px">…or tap the map to drop a pin.</div>
+      <div class="map-wrap" style="margin-top:6px"><svg class="map" id="map"></svg></div>
+
+      <label for="desc">What do you see?</label>
+      <textarea id="desc" placeholder="e.g. Pani bhar gaya hai, gaari phans gayi hai underpass ke paas"></textarea>
+      <div class="chips" id="chips">
+        <button type="button">Pani bhar gaya hai</button>
+        <button type="button">Gaari phans gayi hai</button>
+        <button type="button">Road band hai</button>
+        <button type="button">Nala overflow ho raha hai</button>
+        <button type="button">Koi gir gaya hai, madad chahiye</button>
+        <button type="button">Underpass mein pani</button>
+      </div>
+
+      <label for="photo">Photo (optional)</label>
+      <input type="file" id="photo" accept="image/*" capture="environment">
+      <img id="photo-prev" class="photo-prev hidden" alt="Photo preview">
+
+      <label for="name">Your name (optional)</label>
+      <input type="text" id="name" placeholder="Imran" maxlength="40">
+
+      <button class="btn primary" id="submit" style="width:100%;justify-content:center;margin-top:16px;padding:12px">Send report</button>
+      <div id="err" class="small" style="color:var(--sev-critical);margin-top:8px"></div>
+    </section>
+
+    <section class="card result hidden" id="result" style="margin-top:14px"></section>
+
+    <section style="margin-top:18px" class="inbox">
+      <h3 style="margin-bottom:8px">🔔 Alerts for your area</h3>
+      <div id="inbox"><div class="empty">No alerts right now. Stay safe.</div></div>
+    </section>
+  </main>
+
+  <script src="js/map.js"></script>
+  <script src="js/citizen.js"></script>
+</body>
+</html>

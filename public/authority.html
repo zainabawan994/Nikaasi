@@ -1,0 +1,100 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Nikaasi Command</title>
+  <link rel="icon" href="assets/logo.svg">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+  <!-- PIN gate -->
+  <div class="gate" id="gate">
+    <form class="card" id="gate-form">
+      <img src="assets/logo.svg" alt="">
+      <h2 style="margin:8px 0 2px">Nikaasi Command</h2>
+      <p class="muted small">Municipal &amp; Traffic Authority access</p>
+      <input type="password" id="pin" placeholder="Authority PIN" inputmode="numeric" autocomplete="off" aria-label="Authority PIN">
+      <button class="btn primary" style="width:100%;justify-content:center;margin-top:10px">Enter</button>
+      <div id="gate-err" class="small" style="color:var(--sev-critical);margin-top:8px"></div>
+      <p class="small muted" style="margin-top:12px">Demo PIN: 1122</p>
+    </form>
+  </div>
+
+  <div id="app" class="hidden">
+    <header class="topbar">
+      <a class="brand" href="/"><img src="assets/logo.svg" alt=""><span><span class="name">Nikaasi</span><span class="tag">Command dashboard</span></span></a>
+      <span class="clock" id="clock">--:--</span>
+      <span class="badge dark live" id="run-badge"><span class="dot"></span>paused</span>
+      <span class="badge dark" id="ai-badge">AI</span>
+      <span class="spacer"></span>
+      <button class="btn primary" id="play">▶ Play "G-10 monsoon" story</button>
+      <button class="btn ghost" id="pause">⏸ Pause</button>
+      <button class="btn ghost" id="step" title="Advance one simulated minute">+1 min</button>
+      <select class="ghost" id="speed" aria-label="Simulation speed">
+        <option value="1">1×</option><option value="2">2×</option><option value="4">4×</option><option value="8">8×</option>
+      </select>
+      <button class="btn ghost" id="reset">↺ Reset</button>
+      <label class="switch" style="color:#fff;margin:0"><input type="checkbox" id="auto"> Auto-execute plans</label>
+    </header>
+
+    <div class="wrap">
+      <section class="grid kpis" id="kpis"></section>
+
+      <section class="grid main" style="margin-top:16px">
+        <div class="grid">
+          <div class="card">
+            <h3>🗺 Live zone map <span class="right small muted">schematic, not to scale · click a sector</span></h3>
+            <div class="map-wrap"><svg class="map" id="map"></svg></div>
+            <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px">
+              <div id="legend"></div>
+              <label class="switch"><input type="checkbox" id="show-depth" checked> Show simulated water depth (ground truth)</label>
+            </div>
+          </div>
+
+          <div class="card">
+            <h3>📊 Response impact: before vs after <span class="right small muted" id="impact-sub"></span></h3>
+            <div id="impact"></div>
+          </div>
+        </div>
+
+        <div class="grid">
+          <div class="card">
+            <h3>🚨 Incidents <span class="right small muted" id="inc-count"></span></h3>
+            <div class="inc-list" id="incidents"></div>
+          </div>
+          <div class="card" id="detail"></div>
+        </div>
+      </section>
+
+      <section class="grid row3" style="margin-top:16px">
+        <div class="card">
+          <h3>🧠 Reasoning trail <span class="right small muted" id="trail-sub"></span></h3>
+          <ul class="timeline" id="trail"></ul>
+        </div>
+        <div class="card">
+          <h3>📡 Signal feeds <span class="right small muted">PMD + ITP (mock)</span></h3>
+          <div style="max-height:250px;overflow:auto"><table class="tbl" id="feeds"></table></div>
+          <details style="margin-top:10px">
+            <summary class="small" style="cursor:pointer;font-weight:600">Inject weather alert (manual override)</summary>
+            <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;margin-top:8px">
+              <select id="w-sector" aria-label="Sector"></select>
+              <select id="w-level" aria-label="Alert level"><option value="red">Red</option><option value="orange">Orange</option><option value="yellow">Yellow</option><option value="none">None</option><option value="clear">Clear override</option></select>
+              <input type="number" id="w-rain" value="55" min="0" max="150" aria-label="Rain mm/h">
+            </div>
+            <button class="btn" id="w-apply" style="margin-top:6px">Apply to feed</button>
+          </details>
+        </div>
+        <div class="card">
+          <h3>🧾 Activity log</h3>
+          <div class="feed" id="log"></div>
+        </div>
+      </section>
+    </div>
+  </div>
+
+  <script src="js/map.js"></script>
+  <script src="js/authority.js"></script>
+</body>
+</html>
