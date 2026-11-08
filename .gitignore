@@ -3,3 +3,4 @@ node_modules/
 .env.docker
 __pycache__/
 .pytest_cache/
+deploy/backups/

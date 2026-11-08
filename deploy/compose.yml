@@ -1,0 +1,115 @@
+# Production stack for a single Linux server (e.g. Oracle Cloud Always Free).
+#   cd nikaasi/deploy && docker compose up -d --build
+# Secrets come from deploy/.env (created by setup-server.sh, git-ignored).
+#
+#   internet ──443/80──▶ caddy (HTTPS, Let's Encrypt) ──▶ app:3000 ──▶ db:5432
+#                                                          backup ──▶ db (daily pg_dump)
+# Only Caddy is reachable from outside; app and db live on an internal network.
+
+name: nikaasi
+
+services:
+  db:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: nikaasi
+      POSTGRES_USER: nikaasi_app
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in deploy/.env}
+      POSTGRES_INITDB_ARGS: --auth-host=scram-sha-256 --auth-local=scram-sha-256
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    networks: [backend]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U nikaasi_app -d nikaasi"]
+      interval: 5s
+      timeout: 3s
+      retries: 30
+    shm_size: 128mb
+    logging: &logging
+      driver: json-file
+      options: { max-size: "10m", max-file: "5" }
+
+  app:
+    build:
+      context: ..
+      dockerfile: Dockerfile
+    image: nikaasi-app:latest
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      APP_ENV: production
+      DATABASE_URL: postgresql://nikaasi_app:${POSTGRES_PASSWORD}@db:5432/nikaasi
+      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+      GEMINI_MODEL: ${GEMINI_MODEL:-gemini-3.5-flash}
+      COOKIE_SECURE: "1"
+      TRUST_PROXY: "1"          # Caddy sets X-Forwarded-For to the real client IP
+      ADMIN_EMAIL: ""           # create the first admin with the CLI (see DEPLOY.md)
+      ADMIN_PASSWORD: ""
+    networks: [backend, web]
+    expose: ["3000"]            # not published on the host: only Caddy reaches it
+    read_only: true
+    tmpfs: [/tmp]
+    security_opt: ["no-new-privileges:true"]
+    cap_drop: [ALL]
+    logging: *logging
+
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    depends_on: [app]
+    environment:
+      DOMAIN: ${DOMAIN:?set DOMAIN in deploy/.env}
+      ACME_EMAIL: ${ACME_EMAIL:?set ACME_EMAIL in deploy/.env (certificate expiry notices)}
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"           # HTTP/3
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data        # certificates — keep this volume
+      - caddy_config:/config
+    networks: [web]
+    cap_drop: [ALL]
+    cap_add: [NET_BIND_SERVICE]
+    logging: *logging
+
+  backup:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      PGPASSWORD: ${POSTGRES_PASSWORD}
+      KEEP_DAYS: ${BACKUP_KEEP_DAYS:-14}
+    volumes:
+      - ./backups:/backups
+    networks: [backend]
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        echo "backup: daily pg_dump, keeping $${KEEP_DAYS} days"
+        while true; do
+          f=/backups/nikaasi-$$(date +%Y%m%d-%H%M).dump
+          if pg_dump -h db -U nikaasi_app -d nikaasi -Fc -f "$$f.tmp"; then
+            mv "$$f.tmp" "$$f" && echo "backup: wrote $$f"
+          else
+            rm -f "$$f.tmp"; echo "backup: FAILED"
+          fi
+          find /backups -name 'nikaasi-*.dump' -mtime +"$${KEEP_DAYS}" -delete
+          sleep 86400
+        done
+    logging: *logging
+
+networks:
+  backend:
+    internal: true              # no internet access, not reachable from outside
+  web: {}
+
+volumes:
+  pgdata:
+  caddy_data:
+  caddy_config:

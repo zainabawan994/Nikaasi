@@ -1,0 +1,28 @@
+# Caddy obtains and renews a Let's Encrypt certificate for $DOMAIN automatically
+# and redirects http:// to https://.
+{
+	email {$ACME_EMAIL}
+	servers {
+		protocols h1 h2 h3
+	}
+}
+
+{$DOMAIN} {
+	encode zstd gzip
+
+	reverse_proxy app:3000 {
+		# stream Server-Sent Events (live dashboard) without buffering
+		flush_interval -1
+		# Caddy replaces any client-supplied X-Forwarded-For with the real client IP
+	}
+
+	header {
+		-Server
+		# the app sets CSP, HSTS and the other security headers itself
+	}
+
+	log {
+		output stdout
+		format console
+	}
+}

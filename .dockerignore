@@ -10,3 +10,5 @@ test
 src
 server.js
 package.json
+deploy
+scripts

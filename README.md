@@ -22,7 +22,10 @@ python -m pytest         # 22 tests (+3 PostgreSQL tests, see below)
 ```
 The dashboard needs an account. Set `ADMIN_EMAIL` and `ADMIN_PASSWORD` in `nikaasi/.env` before the first start, or run `python -m app.cli create-user you@example.org --role admin`. Then sign in at `/login.html`. Admins manage users and see the audit log at `/admin.html`. See **[SECURITY.md](SECURITY.md)** for the full security model.
 
-### Docker (app + PostgreSQL)
+### Deploy online for free
+Step-by-step guide for an always-on public server with HTTPS, PostgreSQL and daily backups on Oracle Cloud Always Free: **[DEPLOY.md](DEPLOY.md)** (uses `deploy/compose.yml`, `deploy/Caddyfile` and `deploy/setup-server.sh`).
+
+### Docker (app + PostgreSQL, local)
 ```bash
 cp .env.docker.example .env.docker    # fill in POSTGRES_PASSWORD, ADMIN_EMAIL, ADMIN_PASSWORD
 docker compose --env-file .env.docker up -d --build
