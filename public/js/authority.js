@@ -62,7 +62,7 @@
     $('clock').textContent = state.clock;
     $('run-badge').innerHTML = `<span class="dot"></span>${state.running ? `live · ${state.speed}×` : 'paused'}${state.scenario ? ` · ${esc(state.scenario)}` : ''}`;
     $('pause').textContent = state.running ? '⏸ Pause' : '▶ Resume';
-    $('ai-badge').textContent = state.ai.enabled ? `AI: ${state.ai.model} + rules-v1` : 'AI: rules-v1 (set GEMINI_API_KEY for Gemini)';
+    $('ai-badge').textContent = state.ai.enabled ? 'AI: Gemini' : 'AI: offline';
     $('auto').checked = !!state.settings.autoExecute;
     $('speed').value = String(state.speed);
 
@@ -119,7 +119,7 @@
         <span><span class="id">${i.id}</span> · <b>${i.sector}</b></span>
         <span class="status ${i.status === 'resolved' ? 'done' : waiting(i) ? 'proposed' : ''}">${i.status === 'resolved' ? 'resolved' : waiting(i) ? 'plan awaiting approval' : i.severity === 'Watch' && !i.execution ? 'monitoring' : i.status}</span>
         <span class="meta">opened ${i.openedClock} · peak ${i.peakSeverity}${i.assessment ? ` · ${i.assessment.score}/100 · ${i.assessment.confidence} confidence` : ''}</span>
-      </button>`).join('') : '<div class="empty">No incidents. Press <b>Play</b> to run the G-10 monsoon story, or submit a report from the citizen app.</div>');
+      </button>`).join('') : '<div class="empty">No incidents.</div>');
     $('incidents').querySelectorAll('.inc-item').forEach((b) => b.addEventListener('click', () => { userPicked = true; selIncident = b.dataset.id; selSector = b.dataset.sector; draw(); }));
   }
 
@@ -139,7 +139,7 @@
       <div class="gauge">
         <div class="score" style="color:${window.NikaasiMap.SEV_FILL[a.severity]}">${a.score}</div>
         <div>${sevBadge(a.severity)}<div class="conf" style="margin-top:4px">${a.confidence} confidence · ${a.confidencePct}%</div>
-          <div class="small muted">engine: ${esc(a.engine)}${a.ai ? ` · rules said ${a.rules.score}` : ''}</div></div>
+</div>
       </div>
       <div class="stack" title="Score breakdown">
         <span class="c" style="width:${(bd.citizen / total) * 100}%"></span><span class="w" style="width:${(bd.weather / total) * 100}%"></span>
@@ -155,7 +155,7 @@
 
     if (reports.length) {
       html += `<details style="margin-top:10px" open><summary class="small" style="cursor:pointer;font-weight:600">Citizen reports (${state.reports.filter((r) => r.sector === selSector).length})</summary>
-        <div class="feed" style="max-height:150px">${reports.map((r) => `<div><span class="t">${r.clock}</span><b>${esc(r.name)}</b>: “${esc(r.text)}” ${r.hasPhoto ? `<a href="/api/reports/${r.id}/photo" target="_blank" rel="noopener">📷</a>` : ''}<br><span class="muted">AI (${esc(r.ai.engine)}): ${esc(r.ai.summary)} · evidence ${pct(r.ai.floodEvidence)}</span></div>`).join('')}</div></details>`;
+        <div class="feed" style="max-height:150px">${reports.map((r) => `<div><span class="t">${r.clock}</span><b>${esc(r.name)}</b>: “${esc(r.text)}” ${r.hasPhoto ? `<a href="/api/reports/${r.id}/photo" target="_blank" rel="noopener">📷</a>` : ''}<br><span class="muted">${esc(r.ai.summary)}</span></div>`).join('')}</div></details>`;
     }
 
     if (inc && inc.plan) {
@@ -167,13 +167,13 @@
           <div class="d">${esc(x.detail)}${x.message ? `<div class="alert-msg">${esc(x.message.en)}<br><span class="muted">${esc(x.message.ur)}</span></div>` : ''}</div></div>`).join('')}
         </div>
         <div class="prediction">
-          <div>Avg trip<b>${p.prediction.avgTripMin.before} → ${p.prediction.avgTripMin.after} min</b><span class="muted">predicted</span></div>
-          <div>Into floodwater<b>${p.prediction.exposurePerHr.before.toLocaleString('en-US')} → ${p.prediction.exposurePerHr.after.toLocaleString('en-US')}/h</b><span class="muted">predicted</span></div>
-          <div>Est. depth<b>~${p.prediction.depthGuessCm} cm</b><span class="muted">from reports+traffic</span></div>
+          <div>Avg trip<b>${p.prediction.avgTripMin.before} → ${p.prediction.avgTripMin.after} min</b></div>
+          <div>Into floodwater<b>${p.prediction.exposurePerHr.before.toLocaleString('en-US')} → ${p.prediction.exposurePerHr.after.toLocaleString('en-US')}/h</b></div>
+          <div>Est. depth<b>~${p.prediction.depthGuessCm} cm</b></div>
         </div>
         ${waiting(inc) ? `<button class="btn ${RANK[p.severity] >= 3 ? 'danger' : 'primary'}" id="execute" style="width:100%;justify-content:center;margin-top:10px;padding:10px">▶ Approve &amp; execute ${inc.execution ? 'escalation' : 'plan'}</button>` : ''}`;
     } else if (!inc) {
-      html += `<div class="empty">No incident for ${selSector}. Nikaasi opens one once fused severity reaches <b>Moderate</b> (score ≥ 30).</div>`;
+      html += `<div class="empty">No incident for ${selSector}.</div>`;
     }
 
     if (tickets.length) {
@@ -202,7 +202,7 @@
     const el = $('impact');
     if (!inc || !inc.execution) {
       $('impact-sub').textContent = '';
-      el.innerHTML = `<div class="empty">${inc && inc.plan ? 'Approve and execute the plan. The maps for <b>decision time</b>, <b>now</b> and <b>no response</b> will appear here.' : 'Waiting for an incident with an executed response plan.'}</div>`;
+      el.innerHTML = `<div class="empty">${inc && inc.plan && inc.status !== 'resolved' ? 'Execute the plan to see its impact.' : 'No response executed yet.'}</div>`;
       return;
     }
     const ex = inc.execution;
@@ -251,7 +251,7 @@
     $('trail-sub').textContent = inc ? inc.id : '';
     keepScroll($('trail'), inc ? inc.trail.slice().reverse().map((t) => `
       <li class="k-${t.kind}"><div class="when">${t.clock} · ${t.kind.toUpperCase()}${t.snapshot ? ` · ${t.snapshot.score}/100 ${t.snapshot.severity} · ${t.snapshot.engine}` : ''}</div><div class="small">${esc(t.text)}</div></li>`).join('')
-      : '<div class="empty">Select an incident to see why the AI decided what it did.</div>');
+      : '<div class="empty">Select an incident.</div>');
   }
 
   function drawFeeds() {

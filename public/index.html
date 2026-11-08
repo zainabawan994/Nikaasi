@@ -12,15 +12,12 @@
 <body>
   <header class="topbar">
     <a class="brand" href="/"><img src="assets/logo.svg" alt=""><span><span class="name">Nikaasi</span><span class="tag">Pani se pehle, plan.</span></span></a>
-    <span class="spacer"></span>
-    <span class="badge dark live" id="ai-badge"><span class="dot"></span>connecting…</span>
   </header>
 
   <section class="hero">
     <div class="inner">
-      <span class="badge">Islamabad · Monsoon flood coordination</span>
-      <h1 style="margin-top:14px">Before the street<br>becomes a river.</h1>
-      <p class="lead">Nikaasi combines citizen flood reports, rainfall alerts and live traffic congestion into one severity judgment, then plans and simulates a coordinated response: it reroutes traffic, dispatches drain crews and alerts residents.</p>
+      <h1>Before the street<br>becomes a river.</h1>
+      <p class="lead">Flood reports, rainfall alerts and traffic data in one view, with a coordinated response.</p>
     </div>
   </section>
 
@@ -28,32 +25,26 @@
     <div class="card">
       <span class="badge">Citizen</span>
       <h2>Report flooding</h2>
-      <p class="muted">Tell us what you see in English or Roman Urdu, add a photo, and get live alerts for your sector.</p>
+      <p class="muted">Send a report and get alerts for your area.</p>
       <a class="btn primary" href="citizen.html">Open citizen app →</a>
     </div>
     <div class="card">
-      <span class="badge">Municipal / Traffic Authority</span>
+      <span class="badge">Authority</span>
       <h2>Command dashboard</h2>
-      <p class="muted">Live zone severity, active incidents, AI reasoning trails, one-click response plans and before/after impact.</p>
-      <a class="btn primary" href="authority.html">Open dashboard →</a> <span class="small muted">Demo PIN: 1122</span>
+      <p class="muted">Track incidents and approve responses.</p>
+      <a class="btn primary" href="authority.html">Open dashboard →</a>
     </div>
   </section>
 
   <section class="flow">
     <h3 style="margin-bottom:10px">How it works</h3>
     <div class="flow-steps">
-      <div class="card"><b>1 · Capture</b><br><span class="muted small">Citizen reports + PMD rainfall feed + ITP traffic feed (mocked)</span></div>
-      <div class="card"><b>2 · Fuse &amp; judge</b><br><span class="muted small">Weighted fusion + corroboration → severity, confidence, explanation (Gemini + rules)</span></div>
-      <div class="card"><b>3 · Plan</b><br><span class="muted small">Close segments &amp; reroute, dispatch CDA / 1122, alert residents</span></div>
-      <div class="card"><b>4 · Simulate</b><br><span class="muted small">Traffic re-assignment, ticket lifecycle, pumping, SMS delivery</span></div>
-      <div class="card"><b>5 · Visualise</b><br><span class="muted small">Before / after / no-response maps and metrics</span></div>
+      <div class="card"><b>1 · Capture</b><br><span class="muted small">Reports, rain and traffic</span></div>
+      <div class="card"><b>2 · Judge</b><br><span class="muted small">How serious is it?</span></div>
+      <div class="card"><b>3 · Plan</b><br><span class="muted small">Reroute, dispatch, alert</span></div>
+      <div class="card"><b>4 · Act</b><br><span class="muted small">Simulate the response</span></div>
+      <div class="card"><b>5 · Review</b><br><span class="muted small">See the impact</span></div>
     </div>
   </section>
-
-  <script>
-    fetch('/api/config').then((r) => r.json()).then((c) => {
-      document.getElementById('ai-badge').innerHTML = `<span class="dot"></span>AI: ${c.ai.enabled ? c.ai.model + ' + rules-v1' : 'rules-v1 (offline)'}`;
-    }).catch(() => {});
-  </script>
 </body>
 </html>

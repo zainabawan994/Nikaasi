@@ -46,7 +46,7 @@ button { font: inherit; cursor: pointer; }
 @keyframes pulse { to { box-shadow: 0 0 0 8px rgba(63, 208, 193, 0); } }
 
 /* ---------- controls ---------- */
-.btn { border: 1px solid var(--line); background: #fff; color: var(--ink); padding: 7px 12px; border-radius: 10px; font-weight: 600; display: inline-flex; align-items: center; gap: 6px; }
+.btn { text-decoration: none; border: 1px solid var(--line); background: #fff; color: var(--ink); padding: 7px 12px; border-radius: 10px; font-weight: 600; display: inline-flex; align-items: center; gap: 6px; }
 .btn:hover { border-color: var(--teal); }
 .btn.primary { background: var(--teal); border-color: var(--teal); color: #fff; }
 .btn.primary:hover { background: var(--teal-2); }

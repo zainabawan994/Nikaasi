@@ -14,7 +14,6 @@
     <form class="card" id="gate-form">
       <img src="assets/logo.svg" alt="">
       <h2 style="margin:8px 0 2px">Nikaasi Command</h2>
-      <p class="muted small">Municipal &amp; Traffic Authority access</p>
       <input type="password" id="pin" placeholder="Authority PIN" inputmode="numeric" autocomplete="off" aria-label="Authority PIN">
       <button class="btn primary" style="width:100%;justify-content:center;margin-top:10px">Enter</button>
       <div id="gate-err" class="small" style="color:var(--sev-critical);margin-top:8px"></div>
@@ -45,11 +44,11 @@
       <section class="grid main" style="margin-top:16px">
         <div class="grid">
           <div class="card">
-            <h3>🗺 Live zone map <span class="right small muted">schematic, not to scale · click a sector</span></h3>
+            <h3>🗺 Live zone map</h3>
             <div class="map-wrap"><svg class="map" id="map"></svg></div>
             <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px">
               <div id="legend"></div>
-              <label class="switch"><input type="checkbox" id="show-depth" checked> Show simulated water depth (ground truth)</label>
+              <label class="switch"><input type="checkbox" id="show-depth" checked> Show water depth</label>
             </div>
           </div>
 
@@ -74,16 +73,16 @@
           <ul class="timeline" id="trail"></ul>
         </div>
         <div class="card">
-          <h3>📡 Signal feeds <span class="right small muted">PMD + ITP (mock)</span></h3>
+          <h3>📡 Signal feeds</h3>
           <div style="max-height:250px;overflow:auto"><table class="tbl" id="feeds"></table></div>
           <details style="margin-top:10px">
-            <summary class="small" style="cursor:pointer;font-weight:600">Inject weather alert (manual override)</summary>
+            <summary class="small" style="cursor:pointer;font-weight:600">Set weather alert</summary>
             <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;margin-top:8px">
               <select id="w-sector" aria-label="Sector"></select>
               <select id="w-level" aria-label="Alert level"><option value="red">Red</option><option value="orange">Orange</option><option value="yellow">Yellow</option><option value="none">None</option><option value="clear">Clear override</option></select>
               <input type="number" id="w-rain" value="55" min="0" max="150" aria-label="Rain mm/h">
             </div>
-            <button class="btn" id="w-apply" style="margin-top:6px">Apply to feed</button>
+            <button class="btn" id="w-apply" style="margin-top:6px">Apply</button>
           </details>
         </div>
         <div class="card">

@@ -61,7 +61,7 @@
     const list = state.broadcasts.filter((b) => b.sectors.includes(sector)).slice().reverse();
     $('inbox').innerHTML = list.length ? list.map((b) => `
       <div class="msg ${b.kind}">
-        <div class="small muted">${b.clock} · ${b.kind === 'all_clear' ? 'All clear' : 'Flood warning'} · SMS / push</div>
+        <div class="small muted">${b.clock} · ${b.kind === 'all_clear' ? 'All clear' : 'Flood warning'}</div>
         <div style="margin-top:4px">${esc(b.message.en)}</div>
         <div class="small muted" style="margin-top:4px">${esc(b.message.ur)}</div>
       </div>`).join('') : '<div class="empty">No alerts right now. Stay safe.</div>';
@@ -137,19 +137,16 @@
 
   function showResult({ report, sectorStatus, incidentId }) {
     const s = sectorStatus;
-    const c = s.signals.citizen;
     const el = $('result');
     el.classList.remove('hidden');
     el.innerHTML = `
       <h3>✅ Report ${report.id} received <span class="right small muted">${report.clock}</span></h3>
-      <div class="small muted">AI understood (${esc(report.ai.engine)}):</div>
-      <div style="margin:4px 0 10px"><b>${esc(report.ai.summary)}</b><br><span class="small muted">Flood evidence ${Math.round(report.ai.floodEvidence * 100)}% · depth ${esc(report.ai.depth)} · ${esc(report.ai.hazard.replace(/_/g, ' '))}</span></div>
+      <div style="margin:4px 0 10px"><b>${esc(report.ai.summary)}</b></div>
       <div class="explain small">
         ${incidentId
-          ? `Your report joined incident <b>${incidentId}</b> together with ${Math.max(0, c.uniqueReporters - 1)} other resident report(s). Sector ${s.sector} is <b>${s.severity}</b> (${s.confidence} confidence). The authority has been notified.`
-          : `Sector ${s.sector} stays on <b>${s.severity}</b>. One report alone doesn't trigger a response. Nikaasi waits for rainfall or traffic data to confirm it, or for more reports.`}
-      </div>
-      <div class="small muted">${esc(s.explanation)}</div>`;
+          ? `Authorities notified. ${s.sector} is <b>${s.severity}</b>.`
+          : `Thanks. We'll act if more reports or data confirm it.`}
+      </div>`;
     el.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
   }
 })();
