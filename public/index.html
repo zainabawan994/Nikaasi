@@ -4,47 +4,72 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Nikaasi — Pani se pehle, plan.</title>
+  <meta name="description" content="Report flooding in Islamabad and get live alerts for your area.">
   <link rel="icon" href="assets/logo.svg">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="css/style.css">
 </head>
-<body>
+<body class="home">
   <header class="topbar">
     <a class="brand" href="/"><img src="assets/logo.svg" alt=""><span><span class="name">Nikaasi</span><span class="tag">Pani se pehle, plan.</span></span></a>
+    <span class="spacer"></span>
+    <a class="btn ghost" href="citizen.html">📣 Report</a>
   </header>
 
   <section class="hero">
-    <div class="inner">
-      <h1>Before the street<br>becomes a river.</h1>
-      <p class="lead">Flood reports, rainfall alerts and traffic data in one view, with a coordinated response.</p>
+    <div class="inner home-hero">
+      <div>
+        <h1>Pani bhar gaya?<br>Batayein.</h1>
+        <p class="lead">Report flooding in your street in English or Roman Urdu. Nikaasi checks it against live rain and traffic, sends help, and warns your neighbours.</p>
+        <div class="hero-ctas">
+          <a class="btn primary big" href="citizen.html">📣 Report flooding</a>
+          <a class="btn ghost big" href="citizen.html#alerts">🔔 Alerts for my area</a>
+        </div>
+      </div>
+      <div class="card now-card" aria-live="polite">
+        <div class="now-head">
+          <h3>Islamabad right now</h3>
+          <span class="small muted" id="now-updated">loading…</span>
+        </div>
+        <div class="sector-grid" id="sector-grid"></div>
+        <div class="legend-row small muted">
+          <span><i class="sw sev-bg-Watch"></i>Normal</span><span><i class="sw sev-bg-Moderate"></i>Watch out</span>
+          <span><i class="sw sev-bg-High"></i>Flooding</span><span><i class="sw sev-bg-Critical"></i>Danger</span>
+        </div>
+      </div>
     </div>
   </section>
 
-  <section class="roles">
-    <div class="card">
-      <span class="badge">Citizen</span>
-      <h2>Report flooding</h2>
-      <p class="muted">Send a report and get alerts for your area.</p>
-      <a class="btn primary" href="citizen.html">Open citizen app →</a>
-    </div>
-    <div class="card">
-      <span class="badge">Authority</span>
-      <h2>Command dashboard</h2>
-      <p class="muted">Track incidents and approve responses.</p>
-      <a class="btn primary" href="authority.html">Open dashboard →</a>
-    </div>
-  </section>
+  <main class="wrap home-main">
+    <section class="card" id="warnings-card">
+      <h3>🔔 Active warnings</h3>
+      <div id="warnings"><div class="empty">No warnings right now.</div></div>
+    </section>
 
-  <section class="flow">
-    <h3 style="margin-bottom:10px">How it works</h3>
-    <div class="flow-steps">
-      <div class="card"><b>1 · Capture</b><br><span class="muted small">Reports, rain and traffic</span></div>
-      <div class="card"><b>2 · Judge</b><br><span class="muted small">How serious is it?</span></div>
-      <div class="card"><b>3 · Plan</b><br><span class="muted small">Reroute, dispatch, alert</span></div>
-      <div class="card"><b>4 · Act</b><br><span class="muted small">Simulate the response</span></div>
-      <div class="card"><b>5 · Review</b><br><span class="muted small">See the impact</span></div>
-    </div>
-  </section>
+    <section class="grid steps3">
+      <div class="card"><div class="step-n">1</div><h3>You report</h3><p class="muted">Tell us what you see, like "gaari phans gayi hai", and add a photo if you can.</p></div>
+      <div class="card"><div class="step-n">2</div><h3>We check</h3><p class="muted">Your report is matched with live rainfall and traffic, so help goes where it's really needed.</p></div>
+      <div class="card"><div class="step-n">3</div><h3>Help moves</h3><p class="muted">Drain teams and rescue are sent, roads are diverted, and people nearby get an alert.</p></div>
+    </section>
+
+    <section class="card emergency">
+      <div>
+        <h3>🚨 Someone in danger?</h3>
+        <p class="muted">Call first, then report here.</p>
+      </div>
+      <div class="emergency-numbers">
+        <a class="btn danger big" href="tel:1122">Rescue 1122</a>
+        <a class="btn big" href="tel:15">Police 15</a>
+      </div>
+    </section>
+  </main>
+
+  <footer class="home-footer small muted">
+    <span>Nikaasi · Islamabad flood response</span>
+    <span id="attribution"></span>
+  </footer>
+
+  <script src="js/home.js"></script>
 </body>
 </html>

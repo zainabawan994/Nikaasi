@@ -29,7 +29,7 @@ from typing import Literal
 
 from fastapi import Depends, FastAPI, Query, Request
 from fastapi.exceptions import RequestValidationError
-from fastapi.responses import JSONResponse, Response, StreamingResponse
+from fastapi.responses import FileResponse, JSONResponse, RedirectResponse, Response, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
@@ -452,6 +452,32 @@ def create_app(engine: Engine | None = None) -> FastAPI:
     @app.api_route("/api/{rest:path}", methods=["GET", "POST", "PATCH", "PUT", "DELETE"], include_in_schema=False)
     async def api_404(rest: str):
         raise HttpError(404, "Not found")
+
+    # -------- staff pages: never served to signed-out visitors
+    NOINDEX = {"X-Robots-Tag": "noindex, nofollow", "Cache-Control": "no-store"}
+
+    async def staff_page(request: Request, name: str, admin: bool = False):
+        user = await current_user(request)
+        if not user:
+            return RedirectResponse(f"/login.html?next=/{name}", status_code=303, headers=NOINDEX)
+        if admin and user["role"] != "admin":
+            return RedirectResponse("/authority.html", status_code=303, headers=NOINDEX)
+        return FileResponse(PUBLIC / name, media_type="text/html", headers=NOINDEX)
+
+    @app.get("/authority.html", include_in_schema=False)
+    @app.get("/authority", include_in_schema=False)
+    async def authority_page(request: Request):
+        return await staff_page(request, "authority.html")
+
+    @app.get("/admin.html", include_in_schema=False)
+    @app.get("/admin", include_in_schema=False)
+    async def admin_page(request: Request):
+        return await staff_page(request, "admin.html", admin=True)
+
+    @app.get("/login.html", include_in_schema=False)
+    @app.get("/login", include_in_schema=False)
+    async def login_page():
+        return FileResponse(PUBLIC / "login.html", media_type="text/html", headers=NOINDEX)
 
     # -------- frontend
     if PUBLIC.exists():

@@ -161,3 +161,25 @@ def test_production_mode_hides_docs_and_uses_secure_cookie(monkeypatch):
         sc = r.headers["set-cookie"]
         assert sc.startswith("__Host-nikaasi_session=") and "Secure" in sc
         assert "strict-transport-security" in c.get("/").headers
+
+
+def test_staff_pages_are_not_served_to_signed_out_visitors(client):
+    home = client.get("/").text
+    assert "authority.html" not in home and "admin.html" not in home and "login" not in home.lower(), \
+        "the public home page must not link to the staff area"
+    for path in ("/authority.html", "/authority", "/admin.html", "/admin"):
+        r = client.get(path, follow_redirects=False)
+        assert r.status_code == 303 and r.headers["location"].startswith("/login.html?next=/"), path
+        assert "Command" not in r.text
+    assert client.get("/login.html").headers["x-robots-tag"] == "noindex, nofollow"
+
+
+def test_staff_pages_by_role(client):
+    sign_in(client, "authority")
+    r = client.get("/authority.html", follow_redirects=False)
+    assert r.status_code == 200 and "Nikaasi Command" in r.text and r.headers["x-robots-tag"].startswith("noindex")
+    r = client.get("/admin.html", follow_redirects=False)
+    assert r.status_code == 303 and r.headers["location"] == "/authority.html", "authority users can't open admin"
+    client.post("/api/auth/logout")
+    sign_in(client, "admin")
+    assert client.get("/admin.html", follow_redirects=False).status_code == 200
