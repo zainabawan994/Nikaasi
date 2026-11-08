@@ -35,11 +35,6 @@ Requires **Node.js 18+**, with no dependencies.
 cd nikaasi
 npm start                # http://localhost:3000
 ```
-| Screen | URL |
-|---|---|
-| Landing | `/` |
-| Citizen app | `/citizen.html` |
-| Authority dashboard | `/authority.html` (demo PIN **1122**) |
 
 Press **▶ Play "G-10 monsoon" story** on the dashboard. See [`docs/DEMO_SCRIPT.md`](docs/DEMO_SCRIPT.md) for the walkthrough.
 
