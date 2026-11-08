@@ -1,0 +1,77 @@
+# Nikaasi — Security
+
+This covers the FastAPI backend (`backend/`), which is the full-stack version. The Node prototype (`server.js`) is a demo only: it still uses a shared PIN and must not be exposed.
+
+## Roles
+
+| Role | How | Can |
+|---|---|---|
+| Citizen | anonymous | send reports (rate limited), read alerts and the public map |
+| Authority | signed-in user, role `authority` | operate the dashboard, approve plans, view photos and history |
+| Admin | signed-in user, role `admin` | everything above + manage users, audit log, database status |
+
+There is always at least one active admin: the API refuses to demote or disable the last one.
+
+## Accounts and sessions
+
+- **Passwords** are hashed with **bcrypt** (cost 12, SHA-256 pre-hash so long passphrases aren't truncated). Minimum 10 characters, letters plus a number or symbol, common passwords rejected.
+- **Sessions** are random 256-bit tokens in an `HttpOnly`, `SameSite=Strict` cookie, `Secure` with the `__Host-` prefix in production. Only the token's SHA-256 is stored, so a database leak can't be replayed.
+- Sessions end after **2 h idle** or **12 h total**, on sign-out, and immediately when an admin disables the user or changes their role or password. Changing your own password signs out your other sessions.
+- **Login throttling:** 20 attempts per IP and 5 failures per account per 15 minutes. Wrong passwords and unknown emails get the same message and take the same time, so attackers can't discover which emails exist.
+- **First admin:** set `ADMIN_EMAIL` and `ADMIN_PASSWORD`. They're only used when the `users` table is empty. Remove `ADMIN_PASSWORD` from the environment after the first sign-in and change the password on the Users page. Or use the CLI, which prompts for passwords and never takes them as arguments:
+  ```bash
+  cd backend
+  python -m app.cli create-user you@example.org --role admin
+  python -m app.cli set-password you@example.org
+  python -m app.cli list-users
+  ```
+
+## HTTP hardening
+
+| Control | Detail |
+|---|---|
+| CSRF | Cookie is `SameSite=Strict`; in addition every POST/PATCH/PUT/DELETE to `/api/*` whose `Origin`/`Referer` is another site is rejected (403). Extra trusted origins: `ALLOWED_ORIGINS`. |
+| Headers | `Content-Security-Policy` (scripts only from self, no framing, no plugins), `X-Frame-Options: DENY`, `X-Content-Type-Options: nosniff`, `Referrer-Policy: same-origin`, `Permissions-Policy`, `Cross-Origin-Opener-Policy`; `Strict-Transport-Security` when cookies are secure; `Cache-Control: no-store` on the API |
+| Input | Pydantic schemas with length/range limits; request bodies over 3 MB rejected; photos must be real JPEG/PNG/WebP (checked by content, not by name), ≤ 1.5 MB; SVG and other types refused |
+| Abuse | Citizen reports limited to 10/min and 60/h per IP; one vote per reporter in the severity rule |
+| Privacy | Citizen photos are only served to signed-in users; GPS positions are never sent to browsers |
+| Errors | Unexpected errors return a generic message; details go to the server log only. Database connection errors are not shown to the browser |
+| Production mode | `APP_ENV=production` disables `/docs` and `/openapi.json`, turns on secure cookies and HSTS |
+| Audit log | Sign-ins (ok/failed/blocked), sign-outs, user changes, password changes, plan executions, scenario control, weather overrides and setting changes, with user, time and IP. Passwords never appear in it |
+
+## Database
+
+- The app connects as **`nikaasi_app`**, a role that is **not** a superuser and can't create databases or roles (connection limit 20). It owns only the `nikaasi` database. `CONNECT` is revoked from `PUBLIC`, and `CREATE` on schema `public` is revoked from `PUBLIC`.
+- The password is random (32 characters) and lives only in the git-ignored `nikaasi/.env`.
+- The schema is managed by **Alembic** migrations (`backend/migrations`), applied on startup or with `python -m app.cli migrate`.
+- All queries go through SQLAlchemy with bound parameters, so there's no string-built SQL.
+
+### Action needed on this machine: require passwords in PostgreSQL
+
+The local PostgreSQL 18 server's `pg_hba.conf` (`C:\Program Files\PostgreSQL\18\data\pg_hba.conf`) currently uses **`trust`** for local connections. That means any local process can connect as any role **without a password**, including `postgres`. The `nikaasi_app` password only takes effect after you change that file:
+
+1. Open the file as Administrator.
+2. On the `host` lines for `127.0.0.1/32` and `::1/128`, change the method `trust` to `scram-sha-256`.
+3. Before restarting, make sure you know the `postgres` password, or set one while trust is still on:
+   ```bash
+   psql -U postgres -h localhost -c "\password postgres"
+   ```
+4. Restart the service: *Services → postgresql-x64-18 → Restart*.
+
+## Deployment checklist
+
+- [ ] HTTPS in front of the app (reverse proxy / load balancer); then `COOKIE_SECURE=1` (default in production) and `TRUST_PROXY=1` if the proxy sets `X-Forwarded-For`
+- [ ] `APP_ENV=production`
+- [ ] Strong `POSTGRES_PASSWORD`; database not published to the internet (docker-compose keeps it on the internal network)
+- [ ] First admin created, `ADMIN_PASSWORD` removed from the environment, password changed
+- [ ] `pg_hba.conf` uses `scram-sha-256`, not `trust`
+- [ ] Gemini key restricted in Google AI Studio and rotated if it was ever shared
+- [ ] Database backups (`pg_dump nikaasi`) scheduled
+- [ ] Run a single app worker (`--workers 1`). The simulation, live updates and rate limits are in-process, so scaling out needs a shared store (e.g. Redis) first.
+
+## Known limits
+
+- Rate limits and the simulation are per-process (see the last checklist item).
+- There's no email-based password reset. Admins reset passwords on the Users page or with the CLI.
+- There's no multi-factor authentication yet.
+- Citizen reports are anonymous by design. Abuse is limited by rate limits and by the fusion rule: a single report can't trigger a response.

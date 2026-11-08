@@ -4,7 +4,7 @@
 | Role | Screen | Can do |
 |---|---|---|
 | **Citizen** | `citizen.html` (mobile-first, no login) | Report flooding (sector / map pin / GPS, free text in English or Roman Urdu, optional photo), see the live status of their sector, receive warnings and all-clear alerts |
-| **Municipal / Traffic Authority admin** (CDA, ITP, Rescue 1122 duty officer) | `authority.html` (PIN, demo `1122`) | See live zone severity, incidents, reasoning trails; approve and execute AI response plans; watch tickets, closures and alerts; compare before/after; inject feed values for drills |
+| **Municipal / Traffic Authority admin** (CDA, ITP, Rescue 1122 duty officer) | `login.html` → `authority.html` (account with role `authority` or `admin`; admins also get `admin.html`) | See live zone severity, incidents, reasoning trails; approve and execute AI response plans; watch tickets, closures and alerts; compare before/after; inject feed values for drills |
 | *External systems (mocked)* | `GET /api/feeds/weather`, `GET /api/feeds/traffic` | PMD rainfall alerts; ITP / navigation-probe congestion |
 
 ## Data flow
@@ -104,13 +104,15 @@ Water depth per sector is hidden ground truth: `depth += rain/60 × runoff × 4 
 | Method & path | Who | Purpose |
 |---|---|---|
 | `GET /api/config` | all | world geometry, AI status |
-| `GET /api/stream?pin=` | all | Server-Sent Events state stream (full state only with PIN) |
-| `GET /api/state` | all / PIN | snapshot |
+| `GET /api/stream` | all | Server-Sent Events state stream (full state only when signed in) |
+| `GET /api/state` | all / signed in | snapshot |
+| `POST /api/auth/login` · `logout` · `GET /api/auth/me` · `POST /api/auth/password` | all / signed in | session cookie auth |
+| `GET/POST /api/users` · `PATCH /api/users/:id` · `GET /api/audit` | admin | user management, audit log |
 | `POST /api/reports` | citizen | `{sector \| lat,lng \| x,y, text, photo?, name?, reporterId}` |
 | `GET /api/alerts?sector=` | citizen | broadcasts for a sector |
 | `GET /api/feeds/weather`, `/api/feeds/traffic` | all | the mock external feeds |
-| `POST /api/incidents/:id/execute` | PIN | approve and execute the plan |
-| `POST /api/incidents/:id/reassess` | PIN | force a Gemini re-judgment |
-| `POST /api/scenario` | PIN | `play \| pause \| resume \| step \| reset \| speed` |
-| `POST /api/weather` | PIN | manual weather override (drills) |
-| `POST /api/settings` | PIN | `{autoExecute}` |
+| `POST /api/incidents/:id/execute` | signed in | approve and execute the plan |
+| `POST /api/incidents/:id/reassess` | signed in | force a Gemini re-judgment |
+| `POST /api/scenario` | signed in | `play \| pause \| resume \| step \| reset \| speed` |
+| `POST /api/weather` | signed in | manual weather override (drills) |
+| `POST /api/settings` | signed in | `{autoExecute}` |

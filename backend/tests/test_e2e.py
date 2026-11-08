@@ -8,8 +8,8 @@ from fastapi.testclient import TestClient  # noqa: E402
 from app.engine import Engine  # noqa: E402
 from app.main import create_app  # noqa: E402
 from app.scenario import G10_MONSOON  # noqa: E402
+from conftest import sign_in  # noqa: E402
 
-PIN = {"x-authority-pin": "1122"}
 
 
 def manual_scenario() -> Engine:
@@ -63,26 +63,27 @@ def test_http_api_report_auth_execute():
         assert r.json()["report"]["sector"] == "G-10", "GPS snaps to sector"
 
         assert c.post("/api/scenario", json={"action": "step"}).status_code == 401
-        assert c.post("/api/auth", json={"pin": "0000"}).status_code == 401
-        assert c.post("/api/auth", json={"pin": "1122"}).status_code == 200
+        sign_in(c, "authority")
 
-        assert c.post("/api/weather", json={"sector": "G-10", "alert": "red", "rainMmHr": 60}, headers=PIN).status_code == 200
+        assert c.post("/api/weather", json={"sector": "G-10", "alert": "red", "rainMmHr": 60}).status_code == 200
         c.post("/api/reports", json={"sector": "G-10", "text": "Underpass mein pani, road band hai", "reporterId": "u3"})
-        st = c.get("/api/state", headers=PIN).json()
+        st = c.get("/api/state").json()
         inc = next(i for i in st["incidents"] if i["sector"] == "G-10")
-        assert c.post(f"/api/incidents/{inc['id']}/execute", headers=PIN).status_code == 200
-        assert c.post(f"/api/incidents/{inc['id']}/execute", headers=PIN).status_code == 409
+        assert c.post(f"/api/incidents/{inc['id']}/execute").status_code == 200
+        assert c.post(f"/api/incidents/{inc['id']}/execute").status_code == 409
 
         assert len(c.get("/api/alerts", params={"sector": "G-10"}).json()) >= 1
         assert c.get("/api/feeds/weather").json()["sectors"]["G-10"]["alert"] == "red"
         assert "links" in c.get("/api/feeds/traffic").json()
+        c.post("/api/auth/logout")
         assert "incidents" not in c.get("/api/state").json(), "public state hides authority data"
+        sign_in(c, "authority")
         # play / pause must start and stop the async clock without errors
-        r = c.post("/api/scenario", json={"action": "play"}, headers=PIN)
+        r = c.post("/api/scenario", json={"action": "play"})
         assert r.status_code == 200 and r.json()["running"] is True
-        r = c.post("/api/scenario", json={"action": "pause"}, headers=PIN)
+        r = c.post("/api/scenario", json={"action": "pause"})
         assert r.status_code == 200 and r.json()["running"] is False
-        assert c.post("/api/scenario", json={"action": "fly"}, headers=PIN).status_code == 400
+        assert c.post("/api/scenario", json={"action": "fly"}).status_code == 400
 
         assert c.get("/api/nope").status_code == 404
         assert c.get("/").status_code == 200 and "Nikaasi" in c.get("/").text

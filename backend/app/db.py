@@ -10,7 +10,7 @@ Design
   * The engine only enqueues writes (non-blocking). A single background
     thread owns the connection and applies them in order, so the simulation
     clock never waits on the database.
-  * Tables are created on startup (create_all) — no migration tool needed.
+  * The schema is managed by Alembic migrations (backend/migrations), applied on startup.
 """
 from __future__ import annotations
 
@@ -23,7 +23,7 @@ import threading
 import uuid
 from datetime import datetime, timezone
 
-from sqlalchemy import (Boolean, Column, DateTime, Float, ForeignKey, Integer, LargeBinary, MetaData, String, Table, Text,
+from sqlalchemy import (Boolean, CheckConstraint, Column, DateTime, Float, ForeignKey, Integer, LargeBinary, MetaData, String, Table, Text,
                         UniqueConstraint, create_engine, func, select)
 from sqlalchemy.dialects.postgresql import ARRAY, JSONB, UUID, insert
 
@@ -152,11 +152,49 @@ events = Table(
     Column("created_at", DateTime(timezone=True), nullable=False, default=_now),
 )
 
+# ---------------------------------------------------------------- accounts & audit
+users = Table(
+    "users", metadata,
+    Column("id", Integer, primary_key=True),
+    Column("email", String(254), nullable=False, unique=True),
+    Column("name", String(80), nullable=False),
+    Column("role", String(16), nullable=False),  # authority | admin
+    Column("password_hash", String(100), nullable=False),
+    Column("active", Boolean, nullable=False, default=True),
+    Column("created_at", DateTime(timezone=True), nullable=False, default=_now),
+    Column("password_changed_at", DateTime(timezone=True), nullable=False, default=_now),
+    Column("last_login_at", DateTime(timezone=True)),
+    CheckConstraint("role in ('authority', 'admin')", name="ck_users_role"),
+)
+
+sessions = Table(
+    "sessions", metadata,
+    Column("id", Integer, primary_key=True),
+    Column("token_hash", String(64), nullable=False, unique=True),  # sha256 of the cookie value
+    Column("user_id", Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True),
+    Column("created_at", DateTime(timezone=True), nullable=False, default=_now),
+    Column("last_seen_at", DateTime(timezone=True), nullable=False, default=_now),
+    Column("expires_at", DateTime(timezone=True), nullable=False),
+    Column("ip", String(64)),
+    Column("user_agent", String(200)),
+)
+
+audit_log = Table(
+    "audit_log", metadata,
+    Column("id", Integer, primary_key=True),
+    Column("at", DateTime(timezone=True), nullable=False, default=_now, index=True),
+    Column("user_id", Integer, ForeignKey("users.id", ondelete="SET NULL")),
+    Column("email", String(254)),
+    Column("action", String(48), nullable=False),
+    Column("detail", JSONB),
+    Column("ip", String(64)),
+)
+
 
 class Store:
     """Write-behind PostgreSQL store. All public `save_*` methods are non-blocking."""
 
-    def __init__(self, url: str | None):
+    def __init__(self, url: str | None, migrate: bool = True):
         self.enabled = False
         self.error: str | None = None
         self.run_id: uuid.UUID | None = None
@@ -166,7 +204,9 @@ class Store:
             return
         try:
             self.engine = create_engine(_normalize(url), pool_pre_ping=True, future=True)
-            metadata.create_all(self.engine)
+            if migrate:
+                from .migrate import upgrade
+                upgrade(self.engine)
             self.enabled = True
         except Exception as e:  # noqa: BLE001 - any failure → in-memory mode
             self.error = str(e).splitlines()[0][:200]
@@ -196,6 +236,11 @@ class Store:
             self._q.put(self._run_row)
             self._run_row = None
         self._q.put(stmt)
+
+    def put_global(self, stmt) -> None:
+        """Queue a write that does not belong to a simulation run (e.g. audit log)."""
+        if self.enabled:
+            self._q.put(stmt)
 
     def flush(self, timeout: float = 10.0) -> None:
         """Block until queued writes are applied (used by tests / shutdown)."""
@@ -284,7 +329,7 @@ class Store:
         if self.enabled:
             with self.engine.connect() as c:
                 out["counts"] = {t.name: c.execute(select(func.count()).select_from(t)).scalar_one()
-                                 for t in (runs, reports, incidents, trail, tickets, broadcasts, events)}
+                                 for t in (runs, reports, incidents, trail, tickets, broadcasts, events, users, sessions, audit_log)}
         return out
 
     def list_runs(self, limit: int = 20) -> list[dict]:

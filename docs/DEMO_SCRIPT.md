@@ -1,6 +1,6 @@
 # Demo script (Checkpoint 4) — about 4 minutes
 
-**Setup:** `npm start`, then open two windows: **Authority** `http://localhost:3000/authority.html` (PIN `1122`) and **Citizen** `http://localhost:3000/citizen.html` (phone-size window, sector G-10).
+**Setup:** `cd backend && python run.py`, then open two windows: **Authority** `http://localhost:3000/authority.html` (sign in with an authority or admin account) and **Citizen** `http://localhost:3000/citizen.html` (phone-size window, sector G-10).
 
 | Clock | What happens | What to say |
 |---|---|---|

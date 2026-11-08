@@ -12,17 +12,27 @@ It judges **how serious** the flooding really is, with a confidence level and a 
 ## Run it
 There are two interchangeable backends. Both serve the same API and the same frontend in `public/`.
 
-### Python / FastAPI backend (recommended)
-Requires **Python 3.10+**.
+### Python / FastAPI backend (the full-stack app)
+Requires **Python 3.10+** and, for persistence, **PostgreSQL 14+**.
 ```bash
 cd nikaasi/backend
 pip install -r requirements.txt
-python run.py            # http://localhost:3000  ·  API docs: http://localhost:3000/docs
-python -m pytest         # 8 tests (+3 PostgreSQL tests, see below)
+python run.py            # http://localhost:3000  ·  API docs: http://localhost:3000/docs (development only)
+python -m pytest         # 22 tests (+3 PostgreSQL tests, see below)
 ```
+The dashboard needs an account. Set `ADMIN_EMAIL` and `ADMIN_PASSWORD` in `nikaasi/.env` before the first start, or run `python -m app.cli create-user you@example.org --role admin`. Then sign in at `/login.html`. Admins manage users and see the audit log at `/admin.html`. See **[SECURITY.md](SECURITY.md)** for the full security model.
+
+### Docker (app + PostgreSQL)
+```bash
+cp .env.docker.example .env.docker    # fill in POSTGRES_PASSWORD, ADMIN_EMAIL, ADMIN_PASSWORD
+docker compose --env-file .env.docker up -d --build
+```
+The app runs as a non-root, read-only container on `127.0.0.1:3000`. The database is only reachable from the app container. Put an HTTPS reverse proxy in front for public access.
 | File | Role |
 |---|---|
-| `backend/app/main.py` | FastAPI routes, Pydantic schemas, PIN dependency, SSE stream, static frontend |
+| `backend/app/main.py` | FastAPI routes, Pydantic schemas, auth dependencies, SSE stream, static frontend |
+| `backend/app/auth.py` · `security.py` · `cli.py` | Users, sessions, audit log · hashing, rate limits, headers, CSRF, upload checks · admin CLI |
+| `backend/migrations/` | Alembic schema migrations |
 | `backend/app/engine.py` | Async simulation clock, incidents, execution, tickets, alerts |
 | `backend/app/fusion.py` · `nlp.py` · `gemini.py` | Severity rule, Roman Urdu interpreter, Google AI Studio adapter (httpx) |
 | `backend/app/planner.py` · `traffic.py` · `config.py` · `scenario.py` | Response planner, traffic model, world map, demo script |
@@ -33,16 +43,16 @@ All routes are `async def`, so the engine and its tick loop stay on the event-lo
 ### PostgreSQL database (FastAPI backend)
 With `DATABASE_URL` set in `nikaasi/.env`, everything the system records is saved to PostgreSQL. Without it, or if the server can't be reached, the app runs in memory as before.
 
-1. Create the database (PostgreSQL 14+):
+1. Create a dedicated role and database (PostgreSQL 14+). Don't run the app as `postgres`:
    ```bash
-   createdb -U postgres nikaasi
+   psql -U postgres -c "CREATE ROLE nikaasi_app LOGIN PASSWORD 'long-random-password'"
+   createdb -U postgres -O nikaasi_app nikaasi
    ```
 2. Add it to `nikaasi/.env`:
    ```
-   DATABASE_URL=postgresql://postgres@localhost:5432/nikaasi
+   DATABASE_URL=postgresql://nikaasi_app:long-random-password@localhost:5432/nikaasi
    ```
-   Include a password if your server needs one: `postgresql://postgres:PASSWORD@localhost:5432/nikaasi`.
-3. Start the server. Tables are created automatically.
+3. Start the server. Alembic migrations create and upgrade the tables automatically.
 
 | Table | Contents |
 |---|---|
@@ -53,8 +63,9 @@ With `DATABASE_URL` set in `nikaasi/.env`, everything the system records is save
 | `tickets` | Dispatch tickets with status and full `history` |
 | `broadcasts` | Resident alerts (English + Roman Urdu), recipients, delivered, failed |
 | `events` | The activity log |
+| `users` · `sessions` · `audit_log` | Accounts (bcrypt hashes), login sessions (token hashes only), security audit trail |
 
-Writes go through a background thread, so the simulation never waits on the database. History is available to the authority (PIN header `x-authority-pin`):
+Writes go through a background thread, so the simulation never waits on the database. History is available to signed-in users (`/api/db/status` is admin-only):
 
 | Endpoint | Returns |
 |---|---|
@@ -67,7 +78,7 @@ Writes go through a background thread, so the simulation never waits on the data
 Database tests use a separate, throwaway database. Their tables are dropped and recreated each run:
 ```bash
 createdb -U postgres nikaasi_test
-set NIKAASI_TEST_DATABASE_URL=postgresql://postgres@localhost:5432/nikaasi_test
+set NIKAASI_TEST_DATABASE_URL=postgresql://postgres:YOUR_POSTGRES_PASSWORD@localhost:5432/nikaasi_test
 python -m pytest
 ```
 
@@ -77,11 +88,6 @@ Requires **Node.js 18+**, with no dependencies.
 cd nikaasi
 npm start                # http://localhost:3000
 ```
-| Screen | URL |
-|---|---|
-| Landing | `/` |
-| Citizen app | `/citizen.html` |
-| Authority dashboard | `/authority.html` (demo PIN **1122**) |
 
 Press **▶ Play "G-10 monsoon" story** on the dashboard. See [`docs/DEMO_SCRIPT.md`](docs/DEMO_SCRIPT.md) for the walkthrough.
 
@@ -96,7 +102,7 @@ Gemini then reads every citizen report, including the photo, and re-judges each 
 ```bash
 npm test
 ```
-There are 8 tests: report understanding, every fusion rule property (a single report can't trigger a response, duplicates count once, corroboration, expiry), the **full end-to-end story** (detect → plan → execute → measurable improvement → crews drain → resolve → roads reopen), and the HTTP API, including the PIN guard.
+There are 8 tests: report understanding, every fusion rule property (a single report can't trigger a response, duplicates count once, corroboration, expiry), the **full end-to-end story** (detect → plan → execute → measurable improvement → crews drain → resolve → roads reopen), and the HTTP API. The Node prototype still uses a demo PIN; only the FastAPI backend has accounts.
 
 ## Checkpoint deliverables
 | Checkpoint | Where |
@@ -116,4 +122,4 @@ There are 8 tests: report understanding, every fusion rule property (a single re
 - Weather and traffic feeds are **simulated**. They come from the same world model, so they stay consistent with each other and react to the response.
 - Alerts and tickets are simulated (no SMS gateway, no CDA system).
 - With PostgreSQL, records are kept across restarts, but a restart still begins a fresh simulation: past runs are history, not resumed. The Node backend keeps everything in memory.
-- The authority PIN is a demo gate, not real authentication.
+- The Node prototype only has a shared demo PIN and no accounts. Use the FastAPI backend for anything beyond a local demo.

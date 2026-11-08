@@ -1,0 +1,50 @@
+# Full stack: PostgreSQL + Nikaasi.
+#   1. cp .env.docker.example .env.docker   and fill in the secrets
+#   2. docker compose --env-file .env.docker up -d --build
+#   3. open http://localhost:3000 and sign in with ADMIN_EMAIL / ADMIN_PASSWORD
+services:
+  db:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: nikaasi
+      POSTGRES_USER: nikaasi_app
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env.docker}
+      POSTGRES_INITDB_ARGS: --auth-host=scram-sha-256
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U nikaasi_app -d nikaasi"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    # not published to the host: only the app container can reach the database
+
+  app:
+    build: .
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      APP_ENV: production
+      DATABASE_URL: postgresql://nikaasi_app:${POSTGRES_PASSWORD}@db:5432/nikaasi
+      ADMIN_EMAIL: ${ADMIN_EMAIL:-}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:-}
+      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+      GEMINI_MODEL: ${GEMINI_MODEL:-gemini-3.5-flash}
+      COOKIE_SECURE: ${COOKIE_SECURE:-1}
+      TRUST_PROXY: ${TRUST_PROXY:-}
+      ALLOWED_ORIGINS: ${ALLOWED_ORIGINS:-}
+    ports:
+      - "127.0.0.1:3000:3000"   # put a TLS reverse proxy in front for public access
+    read_only: true
+    tmpfs:
+      - /tmp
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+
+volumes:
+  pgdata:

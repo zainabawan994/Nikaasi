@@ -9,19 +9,7 @@
   <link rel="stylesheet" href="css/style.css">
 </head>
 <body>
-  <!-- PIN gate -->
-  <div class="gate" id="gate">
-    <form class="card" id="gate-form">
-      <img src="assets/logo.svg" alt="">
-      <h2 style="margin:8px 0 2px">Nikaasi Command</h2>
-      <input type="password" id="pin" placeholder="Authority PIN" inputmode="numeric" autocomplete="off" aria-label="Authority PIN">
-      <button class="btn primary" style="width:100%;justify-content:center;margin-top:10px">Enter</button>
-      <div id="gate-err" class="small" style="color:var(--sev-critical);margin-top:8px"></div>
-      <p class="small muted" style="margin-top:12px">Demo PIN: 1122</p>
-    </form>
-  </div>
-
-  <div id="app" class="hidden">
+  <div id="app" class="hidden">  <!-- shown once the session is confirmed -->
     <header class="topbar">
       <a class="brand" href="/"><img src="assets/logo.svg" alt=""><span><span class="name">Nikaasi</span><span class="tag">Command dashboard</span></span></a>
       <span class="clock" id="clock">--:--</span>
@@ -36,6 +24,9 @@
       </select>
       <button class="btn ghost" id="reset">↺ Reset</button>
       <label class="switch" style="color:#fff;margin:0"><input type="checkbox" id="auto"> Auto-execute plans</label>
+      <span class="badge dark" id="user-chip"></span>
+      <a class="btn ghost hidden" id="admin-link" href="admin.html">Users</a>
+      <button class="btn ghost" id="logout">Sign out</button>
     </header>
 
     <div class="wrap">

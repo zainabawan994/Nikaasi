@@ -154,6 +154,7 @@ svg.map .selected { stroke: var(--navy); stroke-width: 3; }
 table.tbl { width: 100%; border-collapse: collapse; font-size: 12px; }
 table.tbl th, table.tbl td { text-align: left; padding: 5px 6px; border-bottom: 1px solid var(--paper); }
 table.tbl th { color: var(--muted); font-weight: 600; }
+table.tbl select { width: auto; min-width: 110px; padding: 4px 8px; }
 .delta-good { color: #11643B; font-weight: 700; }
 .delta-bad { color: var(--sev-critical); font-weight: 700; }
 .empty { color: var(--muted); text-align: center; padding: 20px; font-size: 13px; }

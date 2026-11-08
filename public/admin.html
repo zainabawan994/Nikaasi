@@ -1,0 +1,63 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Users · Nikaasi</title>
+  <link rel="icon" href="assets/logo.svg">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+  <div id="app" class="hidden">
+    <header class="topbar">
+      <a class="brand" href="/"><img src="assets/logo.svg" alt=""><span><span class="name">Nikaasi</span><span class="tag">Administration</span></span></a>
+      <span class="spacer"></span>
+      <span class="badge dark" id="user-chip"></span>
+      <a class="btn ghost" href="authority.html">Dashboard</a>
+      <button class="btn ghost" id="logout">Sign out</button>
+    </header>
+
+    <div class="wrap grid" style="max-width:1100px">
+      <section class="card">
+        <h3>👥 Users</h3>
+        <div style="overflow-x:auto"><table class="tbl" id="users"></table></div>
+        <div id="users-msg" class="small" role="status" style="margin-top:8px"></div>
+      </section>
+
+      <section class="grid row3" style="grid-template-columns:repeat(auto-fit,minmax(300px,1fr))">
+        <form class="card" id="create-form" novalidate>
+          <h3>➕ Add user</h3>
+          <label for="c-email">Email</label><input type="text" id="c-email" autocomplete="off" required>
+          <label for="c-name">Name</label><input type="text" id="c-name" autocomplete="off">
+          <label for="c-role">Role</label>
+          <select id="c-role"><option value="authority">Authority (operate dashboard)</option><option value="admin">Admin (also manage users)</option></select>
+          <label for="c-pw">Temporary password</label><input type="password" id="c-pw" autocomplete="new-password" required>
+          <button class="btn primary" style="margin-top:12px">Create user</button>
+          <div id="c-msg" class="small" role="status" style="margin-top:8px"></div>
+        </form>
+
+        <form class="card" id="pw-form" novalidate>
+          <h3>🔑 Change my password</h3>
+          <label for="p-cur">Current password</label><input type="password" id="p-cur" autocomplete="current-password" required>
+          <label for="p-new">New password</label><input type="password" id="p-new" autocomplete="new-password" required>
+          <p class="small muted">At least 10 characters, with letters and a number or symbol.</p>
+          <button class="btn primary">Update password</button>
+          <div id="p-msg" class="small" role="status" style="margin-top:8px"></div>
+        </form>
+
+        <div class="card">
+          <h3>🗄 Database</h3>
+          <div id="db" class="small"></div>
+        </div>
+      </section>
+
+      <section class="card">
+        <h3>🧾 Audit log</h3>
+        <div style="max-height:420px;overflow:auto"><table class="tbl" id="audit"></table></div>
+      </section>
+    </div>
+  </div>
+  <script src="js/admin.js"></script>
+</body>
+</html>

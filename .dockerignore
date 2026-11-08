@@ -1,0 +1,12 @@
+.env
+.env.*
+!.env.example
+!.env.docker.example
+**/__pycache__
+**/.pytest_cache
+node_modules
+.git
+test
+src
+server.js
+package.json

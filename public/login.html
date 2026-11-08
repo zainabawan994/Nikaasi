@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Sign in · Nikaasi</title>
+  <link rel="icon" href="assets/logo.svg">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+  <div class="gate">
+    <form class="card" id="login-form" novalidate>
+      <img src="assets/logo.svg" alt="">
+      <h2 style="margin:8px 0 14px">Nikaasi Command</h2>
+      <label for="email" style="text-align:left">Email</label>
+      <input type="text" id="email" autocomplete="username" inputmode="email" required>
+      <label for="password" style="text-align:left">Password</label>
+      <input type="password" id="password" autocomplete="current-password" required>
+      <button class="btn primary" id="submit" style="width:100%;justify-content:center;margin-top:14px">Sign in</button>
+      <div id="err" class="small" role="alert" style="color:var(--sev-critical);margin-top:10px;min-height:18px"></div>
+      <a href="/" class="small">← Back</a>
+    </form>
+  </div>
+  <script src="js/login.js"></script>
+</body>
+</html>

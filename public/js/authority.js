@@ -2,25 +2,34 @@
   const $ = (id) => document.getElementById(id);
   const { esc, render, legendHTML } = window.NikaasiMap;
   const RANK = { Watch: 0, Moderate: 1, High: 2, Critical: 3 };
-  let pin = sessionStorage.getItem('nikaasi.pin') || '';
-  let world = null, state = null, es = null;
+  let world = null, state = null, es = null, me = null;
   let selSector = 'G-10', selIncident = null, userPicked = false;
 
-  // ------------------------------------------------------------ auth
-  async function login(p) {
-    const r = await fetch('/api/auth', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ pin: p }) });
-    if (!r.ok) throw new Error('Wrong PIN');
-    pin = p; sessionStorage.setItem('nikaasi.pin', p);
-    $('gate').classList.add('hidden'); $('app').classList.remove('hidden');
-    boot();
-  }
-  $('gate-form').addEventListener('submit', (e) => { e.preventDefault(); login($('pin').value).catch((x) => { $('gate-err').textContent = x.message; }); });
-  if (pin) login(pin).catch(() => sessionStorage.removeItem('nikaasi.pin'));
+  // ------------------------------------------------------------ session
+  const toLogin = () => location.replace('/login.html?next=/authority.html');
 
-  function api(path, body) {
-    return fetch(path, { method: 'POST', headers: { 'content-type': 'application/json', 'x-authority-pin': pin }, body: JSON.stringify(body || {}) })
-      .then(async (r) => { const j = await r.json(); if (!r.ok) throw new Error(j.error); return j; });
+  async function api(path, body) {
+    const r = await fetch(path, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body || {}) });
+    if (r.status === 401) { toLogin(); throw new Error('Signed out'); }
+    const j = await r.json().catch(() => ({}));
+    if (!r.ok) throw new Error(j.error || `Request failed (${r.status})`);
+    return j;
   }
+
+  fetch('/api/auth/me').then(async (r) => {
+    if (r.status === 401) return toLogin();
+    if (!r.ok) throw new Error('no auth');
+    me = await r.json();
+    $('user-chip').textContent = `${me.name} · ${me.role}`;
+    if (me.role === 'admin') $('admin-link').classList.remove('hidden');
+    $('app').classList.remove('hidden');
+    boot();
+  }).catch(() => { document.body.innerHTML = '<div class="empty">This server does not support sign-in. Run the FastAPI backend.</div>'; });
+
+  $('logout').onclick = async () => {
+    await fetch('/api/auth/logout', { method: 'POST' }).catch(() => {});
+    location.replace('/login.html');
+  };
 
   // ------------------------------------------------------------ boot
   async function boot() {
@@ -29,8 +38,12 @@
     $('legend').innerHTML = legendHTML();
     Object.keys(world.sectors).sort().forEach((s) => $('w-sector').insertAdjacentHTML('beforeend', `<option>${s}</option>`));
     $('w-sector').value = 'G-10';
-    es = new EventSource(`/api/stream?pin=${encodeURIComponent(pin)}`);
-    es.onmessage = (ev) => { state = JSON.parse(ev.data); draw(); };
+    es = new EventSource('/api/stream');  // session cookie is sent automatically (same origin)
+    es.onmessage = (ev) => {
+      state = JSON.parse(ev.data);
+      if (!state.incidents) { es.close(); toLogin(); return; }  // session expired → public view only
+      draw();
+    };
     es.onerror = () => { $('run-badge').innerHTML = '<span class="dot"></span>reconnecting…'; };
   }
 
@@ -194,7 +207,7 @@
     const ex = $('execute');
     if (ex) ex.onclick = () => { ex.disabled = true; ex.textContent = 'Executing…'; api(`/api/incidents/${inc.id}/execute`).catch((e) => { alert(e.message); ex.disabled = false; }); };
     const ra = $('reassess');
-    if (ra) ra.onclick = () => { ra.disabled = true; ra.textContent = 'Asking…'; api(`/api/incidents/${inc.id}/reassess`); };
+    if (ra) ra.onclick = () => { ra.disabled = true; ra.textContent = 'Asking…'; api(`/api/incidents/${inc.id}/reassess`).catch(() => {}); };
   }
 
   function drawImpact() {
