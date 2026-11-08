@@ -46,6 +46,7 @@ services:
       GEMINI_MODEL: ${GEMINI_MODEL:-gemini-3.5-flash}
       COOKIE_SECURE: "1"
       TRUST_PROXY: "1"          # Caddy sets X-Forwarded-For to the real client IP
+      ALLOWED_HOSTS: ${DOMAIN}  # reject requests for any other Host header
       ADMIN_EMAIL: ""           # create the first admin with the CLI (see DEPLOY.md)
       ADMIN_PASSWORD: ""
     networks: [backend, web]

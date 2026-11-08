@@ -31,9 +31,15 @@ There is always at least one active admin: the API refuses to demote or disable 
 | Control | Detail |
 |---|---|
 | CSRF | Cookie is `SameSite=Strict`; in addition every POST/PATCH/PUT/DELETE to `/api/*` whose `Origin`/`Referer` is another site is rejected (403). Extra trusted origins: `ALLOWED_ORIGINS`. |
-| Headers | `Content-Security-Policy` (scripts only from self, no framing, no plugins), `X-Frame-Options: DENY`, `X-Content-Type-Options: nosniff`, `Referrer-Policy: same-origin`, `Permissions-Policy`, `Cross-Origin-Opener-Policy`; `Strict-Transport-Security` when cookies are secure; `Cache-Control: no-store` on the API |
-| Input | Pydantic schemas with length/range limits; request bodies over 3 MB rejected; photos must be real JPEG/PNG/WebP (checked by content, not by name), ≤ 1.5 MB; SVG and other types refused |
-| Abuse | Citizen reports limited to 10/min and 60/h per IP; one vote per reporter in the severity rule |
+| Headers | `Content-Security-Policy` (scripts only from self, no framing, no plugins), `X-Frame-Options: DENY`, `X-Content-Type-Options: nosniff`, `Referrer-Policy: same-origin`, `Permissions-Policy`, `Cross-Origin-Opener-Policy`, `Cross-Origin-Resource-Policy`, `X-Permitted-Cross-Domain-Policies`; `Strict-Transport-Security` when cookies are secure; `Cache-Control: no-store` on the API |
+| Input | Pydantic schemas with strict formats (sector `F/G/H-8..11`, reporter id `[A-Za-z0-9_.:-]`, report/photo ids), length and range limits, control characters stripped from free text; request bodies over 3 MB rejected; photos must be real JPEG/PNG/WebP (checked by content, not by name), ≤ 1.5 MB; SVG and other types refused |
+| Rate limits (per IP) | Every request: API reads 240/min, API writes 60/min, pages/static 600/min (`RATE_LIMIT_*_PER_MIN`). Responses carry `RateLimit-Limit` / `RateLimit-Remaining`; 429s carry `Retry-After`. Blocks are written to the audit log (at most once per IP per 5 min). `/api/health` is exempt |
+| Rate limits (per account / purpose) | Staff actions 30/min per user (`RATE_LIMIT_STAFF_PER_MIN`); "Ask Gemini" 5/min per user (paid API); sign-in 20 attempts/IP and 5 failures/account per 15 min; citizen reports 10/min and 60/h per IP plus 5 per reporter id per 10 min |
+| Live stream | At most 6 open streams per IP and 300 in total (`MAX_STREAMS_PER_IP`, `MAX_STREAMS`). Staff streams re-check the session every 30 s and close when it is revoked or expires; these checks don't count as activity, so the idle timeout still applies |
+| Server limits | At most 300 concurrent connections (`MAX_CONNECTIONS`, extra requests get 503), 5 s keep-alive timeout, 3 MB body limit |
+| Host header | Only `localhost`, `127.0.0.1` and the hosts in `DOMAIN` / `ALLOWED_HOSTS` are accepted (400 otherwise): blocks Host-header spoofing and DNS rebinding |
+| Admin step-up | Creating users and changing a role, status or password require the admin's **own password again** (`confirmPassword`). Failed confirmations count towards the account lockout and are audited. Admins cannot demote or disable themselves |
+| Abuse | One vote per reporter in the severity rule, so repeated reports from one device don't raise severity |
 | Privacy | Citizen photos are only served to signed-in users; GPS positions are never sent to browsers |
 | Errors | Unexpected errors return a generic message; details go to the server log only. Database connection errors are not shown to the browser |
 | Production mode | `APP_ENV=production` disables `/docs` and `/openapi.json`, turns on secure cookies and HSTS |
@@ -62,6 +68,7 @@ The local PostgreSQL 18 server's `pg_hba.conf` (`C:\Program Files\PostgreSQL\18\
 
 - [ ] HTTPS in front of the app (reverse proxy / load balancer); then `COOKIE_SECURE=1` (default in production) and `TRUST_PROXY=1` if the proxy sets `X-Forwarded-For`
 - [ ] `APP_ENV=production`
+- [ ] `DOMAIN` / `ALLOWED_HOSTS` set to the public hostname (the deploy compose does this from `DOMAIN`)
 - [ ] Strong `POSTGRES_PASSWORD`; database not published to the internet (docker-compose keeps it on the internal network)
 - [ ] First admin created, `ADMIN_PASSWORD` removed from the environment, password changed
 - [ ] `pg_hba.conf` uses `scram-sha-256`, not `trust`

@@ -172,7 +172,8 @@ class AuthService:
                 self._users[user["id"]]["last_login_at"] = now
         return token
 
-    def session_user(self, token: str | None) -> dict | None:
+    def session_user(self, token: str | None, touch: bool = True) -> dict | None:
+        """Resolve a session. touch=False checks validity without counting as user activity."""
         if not token or len(token) > 100:
             return None
         th, now = token_hash(token), _now()
@@ -186,7 +187,7 @@ class AuthService:
                 if not r["active"] or r["expires_at"] < now or now - r["last_seen_at"] > SESSION_IDLE:
                     c.execute(delete(db.sessions).where(db.sessions.c.token_hash == th))
                     return None
-                if now - r["last_seen_at"] > timedelta(minutes=1):  # sliding expiry, throttled
+                if touch and now - r["last_seen_at"] > timedelta(minutes=1):  # sliding expiry, throttled
                     c.execute(update(db.sessions).where(db.sessions.c.token_hash == th).values(last_seen_at=now))
                 return {"id": r["user_id"], "email": r["email"], "name": r["name"], "role": r["role"]}
         with self._lock:
@@ -195,7 +196,8 @@ class AuthService:
             if not s or not u or not u["active"] or s["expires_at"] < now or now - s["last_seen_at"] > SESSION_IDLE:
                 self._sessions.pop(th, None)
                 return None
-            s["last_seen_at"] = now
+            if touch:
+                s["last_seen_at"] = now
             return {"id": u["id"], "email": u["email"], "name": u["name"], "role": u["role"]}
 
     def end_session(self, token: str | None) -> None:

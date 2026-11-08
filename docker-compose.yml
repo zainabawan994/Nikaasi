@@ -36,6 +36,7 @@ services:
       COOKIE_SECURE: ${COOKIE_SECURE:-1}
       TRUST_PROXY: ${TRUST_PROXY:-}
       ALLOWED_ORIGINS: ${ALLOWED_ORIGINS:-}
+      ALLOWED_HOSTS: ${ALLOWED_HOSTS:-}
     ports:
       - "127.0.0.1:3000:3000"   # put a TLS reverse proxy in front for public access
     read_only: true

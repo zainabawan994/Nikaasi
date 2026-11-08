@@ -24,4 +24,4 @@ HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
 
 WORKDIR /srv/nikaasi/backend
 # one worker: the simulation clock, SSE subscribers and rate limits live in-process
-CMD ["sh", "-c", "uvicorn app.main:app --host 0.0.0.0 --port ${PORT} --workers 1 --no-server-header ${TRUST_PROXY:+--proxy-headers --forwarded-allow-ips=*}"]
+CMD ["sh", "-c", "uvicorn app.main:app --host 0.0.0.0 --port ${PORT} --workers 1 --no-server-header --limit-concurrency ${MAX_CONNECTIONS:-300} --timeout-keep-alive 5 ${TRUST_PROXY:+--proxy-headers --forwarded-allow-ips=*}"]

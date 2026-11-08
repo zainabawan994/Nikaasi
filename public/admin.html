@@ -22,6 +22,11 @@
     <div class="wrap grid" style="max-width:1100px">
       <section class="card">
         <h3>Users</h3>
+        <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;background:var(--tint);border:1px solid var(--line);border-radius:10px;padding:10px 12px;margin-bottom:12px">
+          <label for="confirm-pw" style="margin:0">Confirm with your password</label>
+          <input type="password" id="confirm-pw" autocomplete="current-password" style="max-width:260px">
+          <span class="small muted">Needed for every change on this page. Not stored.</span>
+        </div>
         <div style="overflow-x:auto"><table class="tbl" id="users"></table></div>
         <div id="users-msg" class="small" role="status" style="margin-top:8px"></div>
       </section>

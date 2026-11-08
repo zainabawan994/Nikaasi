@@ -23,17 +23,24 @@
 
   $('logout').onclick = async () => { await fetch('/api/auth/logout', { method: 'POST' }).catch(() => {}); location.replace('/login.html'); };
 
+  // every user change needs the admin's own password again (step-up confirmation)
+  function confirmPw() {
+    const v = $('confirm-pw').value;
+    if (!v) { $('confirm-pw').focus(); throw new Error('Enter your own password in "Confirm with your password" first.'); }
+    return v;
+  }
+
   async function loadUsers() {
     const users = await call('GET', '/api/users');
     $('users').innerHTML = '<tr><th>Name</th><th>Email</th><th>Role</th><th>Status</th><th>Last sign-in</th><th></th></tr>' + users.map((u) => `
       <tr data-id="${u.id}">
         <td>${esc(u.name)}${u.id === me.id ? ' <span class="chip">you</span>' : ''}</td>
         <td>${esc(u.email)}</td>
-        <td><select data-act="role" aria-label="Role for ${esc(u.email)}"><option value="authority" ${u.role === 'authority' ? 'selected' : ''}>authority</option><option value="admin" ${u.role === 'admin' ? 'selected' : ''}>admin</option></select></td>
+        <td><select data-act="role" ${u.id === me.id ? 'disabled title="You cannot change your own role"' : ''} aria-label="Role for ${esc(u.email)}"><option value="authority" ${u.role === 'authority' ? 'selected' : ''}>authority</option><option value="admin" ${u.role === 'admin' ? 'selected' : ''}>admin</option></select></td>
         <td>${u.active ? '<span class="status done">active</span>' : '<span class="status">disabled</span>'}</td>
         <td>${when(u.last_login_at)}</td>
         <td style="white-space:nowrap">
-          <button class="btn" data-act="toggle">${u.active ? 'Disable' : 'Enable'}</button>
+          <button class="btn" data-act="toggle" ${u.id === me.id ? 'disabled title="You cannot disable yourself"' : ''}>${u.active ? 'Disable' : 'Enable'}</button>
           <button class="btn" data-act="reset">Reset password</button>
         </td>
       </tr>`).join('');
@@ -41,8 +48,14 @@
 
   $('users').addEventListener('change', async (e) => {
     if (e.target.dataset.act !== 'role') return;
-    const id = Number(e.target.closest('tr').dataset.id);
-    try { await call('PATCH', `/api/users/${id}`, { role: e.target.value }); say('users-msg', 'Role updated. That user was signed out.', true); } catch (err) { say('users-msg', err.message); }
+    const tr = e.target.closest('tr');
+    const id = Number(tr.dataset.id);
+    const email = tr.children[1].textContent;
+    try {
+      if (!confirm(`Change ${email} to "${e.target.value}"? They will be signed out.`)) { loadUsers(); return; }
+      await call('PATCH', `/api/users/${id}`, { role: e.target.value, confirmPassword: confirmPw() });
+      say('users-msg', 'Role updated. That user was signed out.', true);
+    } catch (err) { say('users-msg', err.message); }
     loadUsers(); loadAudit();
   });
 
@@ -55,12 +68,12 @@
       if (act === 'toggle') {
         const enable = e.target.textContent === 'Enable';
         if (!enable && !confirm('Disable this user? They will be signed out immediately.')) return;
-        await call('PATCH', `/api/users/${id}`, { active: enable });
+        await call('PATCH', `/api/users/${id}`, { active: enable, confirmPassword: confirmPw() });
         say('users-msg', enable ? 'User enabled.' : 'User disabled and signed out.', true);
       } else if (act === 'reset') {
         const pw = prompt('New temporary password (10+ characters, letters and a number or symbol):');
         if (!pw) return;
-        await call('PATCH', `/api/users/${id}`, { password: pw });
+        await call('PATCH', `/api/users/${id}`, { password: pw, confirmPassword: confirmPw() });
         say('users-msg', 'Password reset. Share it privately; the user was signed out.', true);
       }
     } catch (err) { say('users-msg', err.message); }
@@ -70,7 +83,7 @@
   $('create-form').addEventListener('submit', async (e) => {
     e.preventDefault();
     try {
-      const u = await call('POST', '/api/users', { email: $('c-email').value, name: $('c-name').value, role: $('c-role').value, password: $('c-pw').value });
+      const u = await call('POST', '/api/users', { email: $('c-email').value, name: $('c-name').value, role: $('c-role').value, password: $('c-pw').value, confirmPassword: confirmPw() });
       say('c-msg', `Created ${u.email}.`, true);
       $('create-form').reset();
       loadUsers(); loadAudit();

@@ -74,23 +74,23 @@ def test_roles_admin_only_routes(client):
 
 def test_user_management_and_session_revocation(client):
     sign_in(client, "admin")
-    weak = client.post("/api/users", json={"email": "op@test.local", "name": "Op", "role": "authority", "password": "short"})
+    weak = client.post("/api/users", json={"email": "op@test.local", "name": "Op", "role": "authority", "password": "short", "confirmPassword": TEST_PASSWORD})
     assert weak.status_code == 400
-    r = client.post("/api/users", json={"email": "Op@Test.local", "name": "Op", "role": "authority", "password": TEST_PASSWORD})
+    r = client.post("/api/users", json={"email": "Op@Test.local", "name": "Op", "role": "authority", "password": TEST_PASSWORD, "confirmPassword": TEST_PASSWORD})
     assert r.status_code == 201 and r.json()["email"] == "op@test.local"
-    assert client.post("/api/users", json={"email": "op@test.local", "password": TEST_PASSWORD}).status_code == 409
+    assert client.post("/api/users", json={"email": "op@test.local", "password": TEST_PASSWORD, "confirmPassword": TEST_PASSWORD}).status_code == 409
     uid = r.json()["id"]
 
     with TestClient(client.app) as op:  # a second browser signed in as the operator
         assert op.post("/api/auth/login", json={"email": "op@test.local", "password": TEST_PASSWORD}).status_code == 200
         assert op.get("/api/auth/me").status_code == 200
-        assert client.patch(f"/api/users/{uid}", json={"active": False}).status_code == 200
+        assert client.patch(f"/api/users/{uid}", json={"active": False, "confirmPassword": TEST_PASSWORD}).status_code == 200
         assert op.get("/api/auth/me").status_code == 401, "disabling a user ends their sessions"
         assert op.post("/api/auth/login", json={"email": "op@test.local", "password": TEST_PASSWORD}).status_code == 401
 
     admin_id = client.get("/api/auth/me").json()["id"]
-    r = client.patch(f"/api/users/{admin_id}", json={"role": "authority"})
-    assert r.status_code == 409, "cannot demote the last active admin"
+    r = client.patch(f"/api/users/{admin_id}", json={"role": "authority", "confirmPassword": TEST_PASSWORD})
+    assert r.status_code == 409, "an admin cannot demote themselves"
     actions = [a["action"] for a in client.get("/api/audit").json()]
     assert {"user.created", "user.updated", "login.ok"} <= set(actions)
     assert "password" not in str(client.get("/api/audit").json()).replace('"password": "reset"', "").replace("password.changed", "")
@@ -183,3 +183,95 @@ def test_staff_pages_by_role(client):
     client.post("/api/auth/logout")
     sign_in(client, "admin")
     assert client.get("/admin.html", follow_redirects=False).status_code == 200
+
+
+
+# ---------------------------------------------------------------- rate limits & hardening
+def test_api_rate_limit_returns_429_with_retry_after(monkeypatch):
+    monkeypatch.setenv("RATE_LIMIT_READ_PER_MIN", "5")
+    with TestClient(create_app(Engine())) as c:
+        codes = [c.get("/api/config") for _ in range(6)]
+        assert [r.status_code for r in codes[:5]] == [200] * 5
+        assert codes[0].headers["ratelimit-limit"] == "5" and codes[4].headers["ratelimit-remaining"] == "0"
+        blocked = codes[5]
+        assert blocked.status_code == 429 and int(blocked.headers["retry-after"]) > 0
+        assert c.get("/api/health").status_code == 200, "health checks are never limited"
+
+
+def test_write_limit_is_separate_and_stricter(monkeypatch):
+    monkeypatch.setenv("RATE_LIMIT_WRITE_PER_MIN", "3")
+    with TestClient(create_app(Engine())) as c:
+        codes = [c.post("/api/auth/logout").status_code for _ in range(4)]
+        assert codes == [200, 200, 200, 429]
+        assert c.get("/api/config").status_code == 200, "reads still work"
+
+
+def test_per_user_staff_action_limit(monkeypatch):
+    monkeypatch.setenv("RATE_LIMIT_STAFF_PER_MIN", "3")
+    with TestClient(create_app(Engine())) as c:
+        sign_in(c, "authority")
+        codes = [c.post("/api/scenario", json={"action": "step"}).status_code for _ in range(4)]
+        assert codes == [200, 200, 200, 429]
+
+
+def test_unknown_host_header_rejected(client):
+    assert client.get("/api/health", headers={"host": "evil.example"}).status_code == 400
+    assert client.get("/api/health", headers={"host": "localhost:3000"}).status_code == 200
+
+
+def test_live_stream_connection_cap(monkeypatch):
+    monkeypatch.setenv("MAX_STREAMS_PER_IP", "0")
+    with TestClient(create_app(Engine())) as c:
+        assert c.get("/api/stream").status_code == 429
+
+
+def test_admin_changes_need_password_confirmation(client):
+    sign_in(client, "admin")
+    sign_in(client, "authority", email="op2@test.local")  # creates the user, switches session
+    client.post("/api/auth/logout")
+    sign_in(client, "admin")
+    uid = next(u["id"] for u in client.get("/api/users").json() if u["email"] == "op2@test.local")
+    assert client.patch(f"/api/users/{uid}", json={"active": False}).status_code == 400, "confirmation is required"
+    assert client.patch(f"/api/users/{uid}", json={"active": False, "confirmPassword": "wrong-pass-1"}).status_code == 403
+    assert client.patch(f"/api/users/{uid}", json={"active": False, "confirmPassword": TEST_PASSWORD}).status_code == 200
+    me = client.get("/api/auth/me").json()
+    assert client.patch(f"/api/users/{me['id']}", json={"active": False, "confirmPassword": TEST_PASSWORD}).status_code == 409
+    assert "confirm.failed" in [a["action"] for a in client.get("/api/audit").json()]
+
+
+def test_failed_confirmations_lock_out(client):
+    sign_in(client, "admin")
+    for _ in range(5):
+        client.post("/api/users", json={"email": "x@test.local", "password": TEST_PASSWORD, "confirmPassword": "bad-guess-1"})
+    r = client.post("/api/users", json={"email": "x@test.local", "password": TEST_PASSWORD, "confirmPassword": TEST_PASSWORD})
+    assert r.status_code == 429
+
+
+def test_gemini_reassess_limited_per_user(client):
+    sign_in(client, "authority")
+    client.app.state.engine.set_weather_override("G-10", "red", 60)
+    for t in ("Pani bhar gaya hai", "Road band hai underpass"):
+        client.post("/api/reports", json={"sector": "G-10", "text": t, "reporterId": t[:4]})
+    iid = client.app.state.engine.active_incident("G-10")["id"]
+    codes = [client.post(f"/api/incidents/{iid}/reassess").status_code for _ in range(6)]
+    assert codes[:5] == [202] * 5 and codes[5] == 429
+
+
+def test_input_formats_are_strict(client):
+    assert client.post("/api/reports", json={"sector": "Z-99", "text": "pani"}).status_code == 400
+    assert client.post("/api/reports", json={"sector": "G-10", "text": "pani hai", "reporterId": "<script>"}).status_code == 400
+    r = client.post("/api/reports", json={"sector": "G-10", "text": "  pani\u0000 bhar gaya  ", "name": "\u001bAli"})
+    assert r.status_code == 200 and r.json()["report"]["text"] == "pani bhar gaya" and r.json()["report"]["name"] == "Ali"
+    sign_in(client, "authority")
+    assert client.get("/api/reports/../../etc/passwd/photo").status_code in (400, 404)
+    assert client.post("/api/scenario", json={"action": "speed", "speed": 1000}).status_code == 400
+
+
+def test_one_reporter_cannot_flood_reports(client):
+    codes = [client.post("/api/reports", json={"sector": "G-9", "text": "pani hai", "reporterId": "same-device"}).status_code for _ in range(6)]
+    assert codes[:5] == [200] * 5 and codes[5] == 429
+
+
+def test_extra_security_headers(client):
+    h = client.get("/api/health").headers
+    assert h["cross-origin-resource-policy"] == "same-origin" and h["x-permitted-cross-domain-policies"] == "none"

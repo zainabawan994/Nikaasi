@@ -11,6 +11,8 @@ Environment (see .env.example and SECURITY.md):
   ALLOWED_ORIGINS    extra origins allowed to POST (comma separated); same-origin always allowed
   COOKIE_SECURE      1 to force Secure cookies (default: on in production)
   TRUST_PROXY        1 when behind a reverse proxy that sets X-Forwarded-For
+  DOMAIN / ALLOWED_HOSTS   accepted Host headers (localhost and 127.0.0.1 always allowed)
+  RATE_LIMIT_READ_PER_MIN / _WRITE_PER_MIN / _STATIC_PER_MIN / _STAFF_PER_MIN, MAX_STREAMS_PER_IP, MAX_STREAMS
   WEATHER_SOURCE     live (default: real rain from Open-Meteo, real-time clock) | demo (scripted story only)
   WEATHER_REFRESH_S  live rain refresh interval, default 300 · WEATHER_ALERT_MM  "10,25,50" mm/h for yellow/orange/red
   GEMINI_API_KEY, GEMINI_MODEL, TICK_MS
@@ -23,15 +25,17 @@ import json
 import logging
 import os
 import re
+import time
 import uuid
 from contextlib import asynccontextmanager
 from typing import Literal
 
-from fastapi import Depends, FastAPI, Query, Request
+from fastapi import Depends, FastAPI, Path, Query, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import FileResponse, JSONResponse, RedirectResponse, Response, StreamingResponse
 from fastapi.staticfiles import StaticFiles
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
+from starlette.middleware.trustedhost import TrustedHostMiddleware
 
 from .env import ROOT, load_dotenv
 
@@ -43,8 +47,8 @@ from .auth import AuthError, AuthService  # noqa: E402  (after .env is loaded)
 from .config import sector_from_latlng, sector_from_xy  # noqa: E402
 from .db import Store  # noqa: E402
 from .engine import Engine, HttpError  # noqa: E402
-from .security import (BodySizeLimit, CsrfOriginCheck, RateLimiter, SecurityHeaders, client_ip,  # noqa: E402
-                       password_problem, validate_photo)
+from .security import (ApiRateLimit, BodySizeLimit, CsrfOriginCheck, RateLimiter, SecurityHeaders,  # noqa: E402
+                       allowed_hosts, client_ip, password_problem, validate_photo)
 
 
 def production() -> bool:
@@ -57,16 +61,27 @@ def cookie_secure() -> bool:
 
 
 # ---------------------------------------------------------------- schemas
+SECTOR = r"^[FGH]-(8|9|10|11)$"
+CONTROL = re.compile(r"[\x00-\x08\x0b-\x1f\x7f]")
+
+
+def clean_text(v: str | None) -> str | None:
+    """Drop control characters (keeps newlines/tabs) and surrounding whitespace."""
+    return None if v is None else CONTROL.sub("", v).strip()
+
+
 class ReportIn(BaseModel):
     text: str = Field(default="", max_length=2000)
-    sector: str | None = Field(default=None, max_length=8)
+    sector: str | None = Field(default=None, pattern=SECTOR)
     name: str | None = Field(default=None, max_length=80)
-    reporterId: str | None = Field(default=None, max_length=128)
+    reporterId: str | None = Field(default=None, pattern=r"^[A-Za-z0-9_.:-]{1,128}$")
     photo: str | None = Field(default=None, max_length=2_100_000)
     lat: float | None = Field(default=None, ge=-90, le=90)
     lng: float | None = Field(default=None, ge=-180, le=180)
-    x: float | None = None
-    y: float | None = None
+    x: float | None = Field(default=None, ge=0, le=2000)
+    y: float | None = Field(default=None, ge=0, le=2000)
+
+    _clean = field_validator("text", "name")(clean_text)
 
 
 class LoginIn(BaseModel):
@@ -84,6 +99,9 @@ class UserCreateIn(BaseModel):
     name: str = Field(default="", max_length=80)
     role: Literal["authority", "admin"] = "authority"
     password: str = Field(max_length=256)
+    confirmPassword: str = Field(max_length=256)  # the acting admin's own password (step-up check)
+
+    _clean = field_validator("name")(clean_text)
 
 
 class UserUpdateIn(BaseModel):
@@ -91,17 +109,20 @@ class UserUpdateIn(BaseModel):
     role: Literal["authority", "admin"] | None = None
     active: bool | None = None
     password: str | None = Field(default=None, max_length=256)
+    confirmPassword: str = Field(max_length=256)
+
+    _clean = field_validator("name")(clean_text)
 
 
 class ScenarioIn(BaseModel):
     action: Literal["play", "live", "reset", "pause", "resume", "step", "speed"]
-    speed: float | None = None
+    speed: float | None = Field(default=None, ge=0.5, le=8)
 
 
 class WeatherIn(BaseModel):
-    sector: str = Field(max_length=8)
+    sector: str = Field(pattern=SECTOR)
     alert: Literal["none", "yellow", "orange", "red", "clear"]
-    rainMmHr: float | None = 0
+    rainMmHr: float | None = Field(default=0, ge=0, le=150)
 
 
 class SettingsIn(BaseModel):
@@ -122,6 +143,19 @@ def create_app(engine: Engine | None = None) -> FastAPI:
     login_fail = RateLimiter(5, 15 * 60)       # failures per account per 15 min
     report_min = RateLimiter(10, 60)           # citizen reports per IP per minute
     report_hour = RateLimiter(60, 60 * 60)     # ... and per hour
+    reporter_lim = RateLimiter(5, 10 * 60)     # reports per reporter id per 10 min
+    staff_writes = RateLimiter(int(os.environ.get("RATE_LIMIT_STAFF_PER_MIN", "30")), 60)  # per signed-in user
+    ai_calls = RateLimiter(5, 60)              # manual Gemini re-judgements per user per minute (costs money)
+    stream_limit = {"per_ip": int(os.environ.get("MAX_STREAMS_PER_IP", "6")), "total": int(os.environ.get("MAX_STREAMS", "300"))}
+    streams: dict[str, int] = {}
+    blocked_logged: dict[str, float] = {}
+
+    def note_block(ip: str, bucket: str, path: str) -> None:
+        """Audit rate-limit hits, at most once per IP and bucket every 5 minutes."""
+        key, now = f"{ip}:{bucket}", time.monotonic()
+        if now - blocked_logged.get(key, -1e9) > 300:
+            blocked_logged[key] = now
+            auth.audit(None, "ratelimit.blocked", {"bucket": bucket, "path": path[:80]}, ip)
 
     @asynccontextmanager
     async def lifespan(_: FastAPI):
@@ -151,8 +185,11 @@ def create_app(engine: Engine | None = None) -> FastAPI:
     app.state.engine = eng
     app.state.auth = auth
     allowed = {o.strip().rstrip("/") for o in os.environ.get("ALLOWED_ORIGINS", "").split(",") if o.strip()}
+    # outermost last: headers → host check → rate limit → size limit → CSRF → routes
     app.add_middleware(CsrfOriginCheck, allowed=allowed)
     app.add_middleware(BodySizeLimit, max_bytes=3_000_000)
+    app.add_middleware(ApiRateLimit, on_block=note_block)
+    app.add_middleware(TrustedHostMiddleware, allowed_hosts=allowed_hosts())
     app.add_middleware(SecurityHeaders, hsts=cookie_secure())
 
     @app.exception_handler(HttpError)
@@ -195,6 +232,32 @@ def create_app(engine: Engine | None = None) -> FastAPI:
     require_authority = require("authority")
     require_admin = require("admin")
 
+    def limited(role: str = "authority"):
+        """Signed-in user + per-user limit on state-changing staff actions."""
+        base = require(role)
+
+        async def dep(request: Request) -> dict:
+            user = await base(request)
+            ok, _, retry = staff_writes.take(f"user:{user['id']}")
+            if not ok:
+                note_block(client_ip(request), "staff", request.url.path)
+                raise HttpError(429, f"Too many actions. Try again in {retry} s.")
+            return user
+        return dep
+
+    staff_action = limited("authority")
+    admin_action = limited("admin")
+
+    async def confirm_admin(admin: dict, password: str, request: Request) -> None:
+        """Step-up check: sensitive admin changes need the admin's own password again."""
+        key = admin["email"]
+        if login_fail.blocked(key):
+            raise HttpError(429, "Too many failed confirmations. Try again in 15 minutes.")
+        if not await asyncio.to_thread(auth.authenticate, admin["email"], password):
+            login_fail.hit(key)
+            audit(admin, "confirm.failed", None, request)
+            raise HttpError(403, "Password confirmation failed")
+
     def audit(user, action, detail=None, request: Request | None = None):
         auth.audit(user, action, detail, client_ip(request) if request else None)
 
@@ -218,10 +281,17 @@ def create_app(engine: Engine | None = None) -> FastAPI:
 
     @app.get("/api/stream", tags=["public"], response_class=StreamingResponse)
     async def stream(request: Request):
+        ip = client_ip(request)
+        if streams.get(ip, 0) >= stream_limit["per_ip"] or sum(streams.values()) >= stream_limit["total"]:
+            note_block(ip, "stream", "/api/stream")
+            raise HttpError(429, "Too many open live connections")
         authority = bool(await current_user(request))
+        token = request.cookies.get(cookie_name)
         queue = eng.subscribe()
+        streams[ip] = streams.get(ip, 0) + 1
 
         async def gen():
+            last_check = time.monotonic()
             try:
                 yield f"data: {json.dumps(eng.state(authority=authority))}\n\n"
                 while True:
@@ -229,12 +299,19 @@ def create_app(engine: Engine | None = None) -> FastAPI:
                         await asyncio.wait_for(queue.get(), timeout=20)
                     except asyncio.TimeoutError:
                         yield ": ka\n\n"
-                        continue
                     if await request.is_disconnected():
                         break
+                    # a staff stream ends as soon as the session is revoked or expires
+                    if authority and time.monotonic() - last_check >= 30:
+                        last_check = time.monotonic()
+                        if not await asyncio.to_thread(auth.session_user, token, False):
+                            break
                     yield f"data: {json.dumps(eng.state(authority=authority))}\n\n"
             finally:
                 eng.unsubscribe(queue)
+                streams[ip] = max(0, streams.get(ip, 1) - 1)
+                if not streams[ip]:
+                    streams.pop(ip, None)
 
         return StreamingResponse(gen(), media_type="text/event-stream",
                                  headers={"cache-control": "no-cache", "x-accel-buffering": "no"})
@@ -252,6 +329,8 @@ def create_app(engine: Engine | None = None) -> FastAPI:
         ip = client_ip(request)
         if not report_min.hit(ip) or not report_hour.hit(ip):
             raise HttpError(429, "Too many reports from this device. Please wait a few minutes.")
+        if body.reporterId and not reporter_lim.hit(body.reporterId):
+            raise HttpError(429, "You have sent several reports already. Thank you; please wait a few minutes.")
         try:
             photo = validate_photo(body.photo)
         except ValueError as e:
@@ -307,7 +386,7 @@ def create_app(engine: Engine | None = None) -> FastAPI:
 
     @app.post("/api/auth/password", tags=["auth"])
     async def change_password(body: PasswordChangeIn, request: Request, response: Response,
-                              user: dict = Depends(require_authority)):
+                              user: dict = Depends(staff_action)):
         if problem := password_problem(body.new):
             raise HttpError(400, problem)
         await asyncio.to_thread(auth.change_password, user["id"], body.current, body.new)
@@ -324,7 +403,8 @@ def create_app(engine: Engine | None = None) -> FastAPI:
         return await asyncio.to_thread(auth.list_users)
 
     @app.post("/api/users", tags=["admin"], status_code=201)
-    async def create_user(body: UserCreateIn, request: Request, admin: dict = Depends(require_admin)):
+    async def create_user(body: UserCreateIn, request: Request, admin: dict = Depends(admin_action)):
+        await confirm_admin(admin, body.confirmPassword, request)
         if problem := password_problem(body.password):
             raise HttpError(400, problem)
         u = await asyncio.to_thread(auth.create_user, body.email, body.name, body.role, body.password)
@@ -332,12 +412,15 @@ def create_app(engine: Engine | None = None) -> FastAPI:
         return u
 
     @app.patch("/api/users/{user_id}", tags=["admin"])
-    async def update_user(user_id: int, body: UserUpdateIn, request: Request, admin: dict = Depends(require_admin)):
+    async def update_user(user_id: int, body: UserUpdateIn, request: Request, admin: dict = Depends(admin_action)):
+        await confirm_admin(admin, body.confirmPassword, request)
+        if user_id == admin["id"] and (body.active is False or (body.role is not None and body.role != "admin")):
+            raise HttpError(409, "You can't remove your own admin access. Ask another admin to do it.")
         if body.password is not None and (problem := password_problem(body.password)):
             raise HttpError(400, problem)
         u = await asyncio.to_thread(auth.update_user, user_id, name=body.name, role=body.role, active=body.active,
                                     password=body.password)
-        changed = {k: v for k, v in body.model_dump(exclude_none=True).items() if k != "password"}
+        changed = {k: v for k, v in body.model_dump(exclude_none=True).items() if k not in ("password", "confirmPassword")}
         if body.password is not None:
             changed["password"] = "reset"
         audit(admin, "user.updated", {"id": user_id, **changed}, request)
@@ -349,7 +432,7 @@ def create_app(engine: Engine | None = None) -> FastAPI:
 
     # -------- authority: operations
     @app.get("/api/reports/{rid}/photo", tags=["authority"])
-    async def report_photo(rid: str, _: dict = Depends(require_authority)):
+    async def report_photo(rid: str = Path(pattern=r"^R-\d{1,6}$"), _: dict = Depends(require_authority)):
         p = eng.photos.get(rid)
         m = re.match(r"^data:([^;]+);base64,(.*)$", p or "", re.DOTALL)
         if not m:
@@ -358,7 +441,7 @@ def create_app(engine: Engine | None = None) -> FastAPI:
                         headers={"cache-control": "private, max-age=600", "content-disposition": "inline"})
 
     @app.post("/api/scenario", tags=["authority"])
-    async def scenario(body: ScenarioIn, request: Request, user: dict = Depends(require_authority)):
+    async def scenario(body: ScenarioIn, request: Request, user: dict = Depends(staff_action)):
         if body.action == "play":
             eng.play_scenario()
         elif body.action == "live":
@@ -379,14 +462,14 @@ def create_app(engine: Engine | None = None) -> FastAPI:
         return {"ok": True, "running": eng.running, "speed": eng.speed}
 
     @app.post("/api/weather", tags=["authority"])
-    async def weather_override(body: WeatherIn, request: Request, user: dict = Depends(require_authority)):
+    async def weather_override(body: WeatherIn, request: Request, user: dict = Depends(staff_action)):
         eng.set_weather_override(body.sector, body.alert, body.rainMmHr, by=user["name"])
         audit(user, "weather.pmd_alert" if eng.mode == "live" else "weather.override",
               {k: v for k, v in body.model_dump().items() if eng.mode != "live" or k != "rainMmHr"}, request)
         return {"ok": True}
 
     @app.post("/api/settings", tags=["authority"])
-    async def settings(body: SettingsIn, request: Request, user: dict = Depends(require_authority)):
+    async def settings(body: SettingsIn, request: Request, user: dict = Depends(staff_action)):
         if body.autoExecute is not None:
             eng.settings["autoExecute"] = body.autoExecute
             audit(user, "settings.autoExecute", {"value": body.autoExecute}, request)
@@ -394,13 +477,16 @@ def create_app(engine: Engine | None = None) -> FastAPI:
         return eng.settings
 
     @app.post("/api/incidents/{iid}/execute", tags=["authority"])
-    async def execute(iid: str, request: Request, user: dict = Depends(require_authority)):
+    async def execute(iid: str, request: Request, user: dict = Depends(staff_action)):
         inc = eng.execute(iid, user["name"])
         audit(user, "incident.execute", {"incident": inc["id"], "sector": inc["sector"], "plan": inc["plan"]["version"]}, request)
         return {"ok": True, "id": inc["id"], "status": inc["status"]}
 
     @app.post("/api/incidents/{iid}/reassess", tags=["authority"], status_code=202)
-    async def reassess(iid: str, _: dict = Depends(require_authority)):
+    async def reassess(iid: str, request: Request, user: dict = Depends(staff_action)):
+        ok, _, retry = ai_calls.take(f"user:{user['id']}")
+        if not ok:
+            raise HttpError(429, f"Gemini was asked recently. Try again in {retry} s.")
         inc = next((i for i in eng.incidents if i["id"] == iid), None)
         if not inc:
             raise HttpError(404, "Not found")

@@ -16,4 +16,6 @@ if __name__ == "__main__":
           + ("" if prod else f"  |  API docs -> http://localhost:{port}/docs"), flush=True)
     uvicorn.run("app.main:app", host=os.environ.get("HOST", "127.0.0.1"), port=port, log_level="info",
                 server_header=False,  # don't advertise the server software
+                limit_concurrency=int(os.environ.get("MAX_CONNECTIONS", "300")),  # beyond this: 503, not a crash
+                timeout_keep_alive=5,  # drop idle keep-alive connections quickly (slow-client protection)
                 proxy_headers=os.environ.get("TRUST_PROXY") == "1", forwarded_allow_ips="*" if os.environ.get("TRUST_PROXY") == "1" else None)

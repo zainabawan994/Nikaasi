@@ -95,6 +95,20 @@ class RateLimiter:
             q.append(now)
             return True
 
+    def take(self, key: str) -> tuple[bool, int, int]:
+        """Record a hit; return (allowed, remaining, retry_after_seconds)."""
+        now = time.monotonic()
+        with self._lock:
+            q = self._hits[key]
+            self._trim(q, now)
+            if len(q) >= self.limit:
+                return False, 0, max(1, int(self.window - (now - q[0])) + 1)
+            q.append(now)
+            if len(self._hits) > 50_000:  # bound memory under a flood of distinct keys
+                for k in [k for k, v in self._hits.items() if not v][:10_000]:
+                    del self._hits[k]
+            return True, self.limit - len(q), 0
+
     def blocked(self, key: str) -> bool:
         now = time.monotonic()
         with self._lock:
@@ -182,6 +196,8 @@ class SecurityHeaders(BaseHTTPMiddleware):
         h.setdefault("Referrer-Policy", "same-origin")
         h.setdefault("Permissions-Policy", "geolocation=(self), camera=(self), microphone=(), payment=()")
         h.setdefault("Cross-Origin-Opener-Policy", "same-origin")
+        h.setdefault("Cross-Origin-Resource-Policy", "same-origin")
+        h.setdefault("X-Permitted-Cross-Domain-Policies", "none")
         if path.startswith("/api/"):
             h.setdefault("Cache-Control", "no-store")
         elif path == "/" or path.endswith((".html", ".js", ".css", ".svg")):
@@ -226,3 +242,54 @@ class BodySizeLimit(BaseHTTPMiddleware):
         if cl and cl.isdigit() and int(cl) > self.max:
             return JSONResponse({"error": "Payload too large"}, status_code=413)
         return await call_next(request)
+
+
+class ApiRateLimit(BaseHTTPMiddleware):
+    """
+    Per-IP limits for every request, applied before routing:
+      reads  (GET/HEAD on /api/*)              RATE_LIMIT_READ_PER_MIN   (default 240)
+      writes (POST/PATCH/PUT/DELETE on /api/*) RATE_LIMIT_WRITE_PER_MIN  (default 60)
+      pages and static files                   RATE_LIMIT_STATIC_PER_MIN (default 600)
+    /api/stream has its own connection cap and /api/health is exempt (monitoring).
+    Responses carry RateLimit-Limit / RateLimit-Remaining; 429s carry Retry-After.
+    """
+
+    def __init__(self, app, on_block=None):
+        super().__init__(app)
+        env = lambda k, d: max(1, int(os.environ.get(k, d)))  # noqa: E731
+        self.limits = {
+            "read": RateLimiter(env("RATE_LIMIT_READ_PER_MIN", "240"), 60),
+            "write": RateLimiter(env("RATE_LIMIT_WRITE_PER_MIN", "60"), 60),
+            "static": RateLimiter(env("RATE_LIMIT_STATIC_PER_MIN", "600"), 60),
+        }
+        self.on_block = on_block
+
+    async def dispatch(self, request: Request, call_next) -> Response:
+        path = request.url.path
+        if path in ("/api/stream", "/api/health"):
+            return await call_next(request)
+        if path.startswith("/api/"):
+            bucket = "write" if request.method in ("POST", "PUT", "PATCH", "DELETE") else "read"
+        else:
+            bucket = "static"
+        lim = self.limits[bucket]
+        ip = client_ip(request)
+        ok, remaining, retry = lim.take(f"{bucket}:{ip}")
+        if not ok:
+            if self.on_block:
+                self.on_block(ip, bucket, path)
+            return JSONResponse({"error": "Too many requests. Please slow down."}, status_code=429,
+                                headers={"Retry-After": str(retry), "RateLimit-Limit": str(lim.limit), "RateLimit-Remaining": "0"})
+        resp = await call_next(request)
+        if path.startswith("/api/"):
+            resp.headers["RateLimit-Limit"] = str(lim.limit)
+            resp.headers["RateLimit-Remaining"] = str(remaining)
+        return resp
+
+
+def allowed_hosts() -> list[str]:
+    """Host header allow-list (stops Host-header spoofing / DNS rebinding)."""
+    hosts = {"localhost", "127.0.0.1", "testserver"}
+    for var in ("DOMAIN", "ALLOWED_HOSTS"):
+        hosts.update(h.strip().lower() for h in os.environ.get(var, "").split(",") if h.strip())
+    return sorted(hosts)
