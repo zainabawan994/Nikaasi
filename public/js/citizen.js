@@ -33,7 +33,7 @@
     const sectorSev = {};
     Object.entries(state.sectors).forEach(([k, v]) => { sectorSev[k] = v.severity; });
     window.NikaasiMap.render($('map'), world, { links: state.traffic.links, sectorSev }, {
-      selected: sector, labels: false, pin,
+      selected: sector, labels: false, pin, theme: 'light',
       onSelect: (s, p) => { pin = p; gps = null; setSector(s); draw(); },
     });
   }

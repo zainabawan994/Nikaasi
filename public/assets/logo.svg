@@ -1,9 +1,11 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="Nikaasi logo">
-  <!-- raindrop in river blue, flat -->
-  <path d="M32 3 C32 3 11 27 11 40 a21 21 0 0 0 42 0 C53 27 32 3 32 3 Z" fill="#2F6690"/>
-  <!-- survey grid: the city's street blocks -->
-  <path d="M19 40 H45 M32 24 V58" stroke="#F2EEE6" stroke-opacity=".35" stroke-width="2"/>
-  <!-- outflow: water routed out (nikaas), road-marking yellow -->
-  <path d="M18 48 H28 L37 38 H46" fill="none" stroke="#E0A526" stroke-width="5" stroke-linejoin="miter"/>
-  <path d="M42 31 L50 38 L42 45" fill="none" stroke="#E0A526" stroke-width="5" stroke-linejoin="miter"/>
+  <defs>
+    <linearGradient id="nk" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#60A5FA"/>
+      <stop offset="1" stop-color="#1D4ED8"/>
+    </linearGradient>
+  </defs>
+  <path d="M32 3 C32 3 11 27 11 40 a21 21 0 0 0 42 0 C53 27 32 3 32 3 Z" fill="url(#nk)"/>
+  <path d="M17 40c3-3 6-3 9 0s6 3 9 0 6-3 9 0" fill="none" stroke="#fff" stroke-width="3.2" stroke-linecap="round"/>
+  <path d="M19 48c3-3 6-3 9 0s6 3 9 0 5-3 8-.5" fill="none" stroke="#fff" stroke-opacity=".7" stroke-width="3.2" stroke-linecap="round"/>
 </svg>

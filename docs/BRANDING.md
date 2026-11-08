@@ -7,46 +7,42 @@
 **"Pani se pehle, plan."** (*Plan before the water.*)
 Public headline: **"Pani bhar gaya? Batayein."**
 
-## Design direction: civic works
-Nikaasi should look like something a municipality issues, not a generic app template. The references are:
-- survey and engineering drawings: paper, grid lines, 1 px rules
-- Pakistani road and traffic signage: condensed capitals, black and road-marking yellow
-- emergency-operations boards: dense, ruled, numbers first
+## Design direction: operations dashboard
+The staff app follows an **emergency-operations dashboard** layout:
+- a **navy sidebar** for navigation: Dashboard, Incidents, Map view, Dispatches, Alerts, Feeds & weather, Settings, and Users for admins
+- a light workspace with white cards
+- a **dark live flood map** where problem roads glow and normal roads stay quiet
+- on the dashboard: four KPI cards (active incidents, rain, traffic, system status) with sparklines; an incident card with a **confidence ring** and an **AI reasoning checklist**; a **response-actions stepper**; **before/after** mini maps; and **live feeds**
 
 **Rules**
-- No emojis or decorative icons. Labels are words: *Traffic*, *Drain*, *Rescue*, *Alert*. Map markers are lettered squares: **D** drain team, **R** rescue, **P** police.
-- Square corners (3 px), 1 px borders, **no shadows, no colour gradients**. The only patterns are the 48 px survey grid on dark panels.
-- Severity is shown with a solid colour bar or tag, never a soft glow.
-- Public pages use plain words for severity (*Normal, Watch out, Flooding, Danger*). Staff pages use the system terms (*Watch, Moderate, High, Critical*).
+- No emojis. Icons are thin **line icons** (24 px grid, `currentColor`) from `public/js/icons.js`. Map markers are lettered tiles: **D** drain team, **R** rescue, **P** police.
+- Rounded cards (12 px), soft shadows, pill badges for severity and status.
+- Public pages use plain severity words (*Normal, Watch out, Flooding, Danger*). Staff pages use the system terms (*Watch, Moderate, High, Critical*).
 
 ## Logo
-`public/assets/logo.svg`: a flat **river-blue raindrop** with a faint street grid, crossed by a **road-marking-yellow outflow arrow** (*nikaas*). No gradients. Use it on the ink top bar or on paper. Minimum size 24 px.
+`public/assets/logo.svg`: a blue raindrop (light to deep blue) with two white wave lines. It sits on the navy sidebar or top bar, or on white. Minimum size 24 px.
 
 ## Colour
 
 | Token | Hex | Use |
 |---|---|---|
-| Ink | `#1E1D1A` | Text, top bar, dark panels |
-| Survey paper | `#F2EEE6` | Page background |
-| Sheet | `#FBF9F4` | Cards / panels |
-| Tint | `#ECE6DA` | Recessed areas, empty bars |
-| Rule | `#D8D1C3` | Borders, dividers |
-| Margalla green | `#1F4E3D` | Primary actions (sign in, approve) |
-| Road-marking yellow | `#E0A526` | Live state, attention, top-bar rule, public primary button |
-| River blue | `#2F6690` | Water depth, citizen signal |
+| Navy | `#0D1F3C` | Sidebar, public top bar and hero |
+| Workspace | `#F1F4F9` | Page background |
+| Card | `#FFFFFF` | Panels |
+| Ink | `#0F172A` | Text |
+| Muted | `#64748B` | Secondary text |
+| Blue | `#2563EB` | Primary actions, active nav, links |
+| Map night | `#111B2B` | Dark map background |
 | **Severity** | | |
-| Normal / Watch | `#8A8F84` | stone |
-| Watch out / Moderate | `#D9A21B` | mustard |
-| Flooding / High | `#C2571A` | burnt orange |
-| Danger / Critical | `#A4161A` | brick red |
-| Clear / OK | `#2E7D4F` | resolved, delivered |
-
-Road congestion on the map runs from muted green `#4F7A5A` through mustard, burnt orange and brick to `#5E0B0E` (gridlock). Closed roads are dashed stone grey `#7A766C` with a brick-red square ✕.
+| Watch / Normal | `#64748B` (staff) · `#22C55E` on maps | |
+| Moderate | `#CA8A04` · `#EAB308` on maps | |
+| High | `#EA580C` · `#F97316` on maps | |
+| Critical / Severe | `#DC2626` · `#EF4444` on maps | |
+| OK | `#16A34A` | Resolved, operational |
 
 ## Typography
-- **Barlow Condensed** (600/700, uppercase, slight letter-spacing): headings, buttons, labels, big numbers. This is the road-sign voice.
-- **IBM Plex Sans**: body text and explanations.
-- **IBM Plex Mono**: clocks, incident and ticket IDs, timestamps, rain readings.
+- **Plus Jakarta Sans** (400–800): all interface text and numbers.
+- **JetBrains Mono**: incident and ticket IDs, timestamps.
 
 ## Voice
 Calm, specific, bilingual. Every alert is sent in **English and Roman Urdu** and names the road, the action and the emergency number:
