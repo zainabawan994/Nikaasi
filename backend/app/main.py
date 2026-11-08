@@ -7,7 +7,7 @@ Nikaasi FastAPI backend.
 Serves the same JSON + Server-Sent Events API as the Node prototype and the
 static frontend in ../public. Interactive API docs at /docs.
 
-Env: GEMINI_API_KEY, GEMINI_MODEL, AUTHORITY_PIN (default 1122), TICK_MS
+Env: DATABASE_URL (PostgreSQL), GEMINI_API_KEY, GEMINI_MODEL, AUTHORITY_PIN (default 1122), TICK_MS
 """
 from __future__ import annotations
 
@@ -16,6 +16,7 @@ import base64
 import json
 import os
 import re
+import uuid
 from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Literal
@@ -42,6 +43,7 @@ def load_dotenv(path: Path) -> None:
 load_dotenv(ROOT / ".env")
 
 from .config import sector_from_latlng, sector_from_xy  # noqa: E402  (after .env is loaded)
+from .db import Store  # noqa: E402
 from .engine import Engine, HttpError  # noqa: E402
 
 
@@ -85,12 +87,14 @@ class SettingsIn(BaseModel):
 def create_app(engine: Engine | None = None) -> FastAPI:
     # All routes are `async def` on purpose: the engine and its tick loop live on the
     # event loop thread, so no handler may touch it from a worker thread.
-    eng = engine or Engine(tick_ms=int(os.environ.get("TICK_MS", "1500")))
+    eng = engine or Engine(tick_ms=int(os.environ.get("TICK_MS", "1500")), store=Store(os.environ.get("DATABASE_URL")))
+    store = eng.store
 
     @asynccontextmanager
     async def lifespan(_: FastAPI):
         yield
         eng.stop()
+        await asyncio.to_thread(store.close)
 
     app = FastAPI(title="Nikaasi API", version="1.0.0", lifespan=lifespan,
                   description="Flood signal-fusion and coordinated response simulator — Pani se pehle, plan.")
@@ -232,6 +236,43 @@ def create_app(engine: Engine | None = None) -> FastAPI:
             raise HttpError(404, "Not found")
         eng.request_ai(inc["sector"], "manual", force=True)
         return {"ok": True, "aiEnabled": eng.ai_status()["enabled"]}
+
+    # -------- history (PostgreSQL)
+    def require_db() -> None:
+        if not store.enabled:
+            raise HttpError(503, "Database not configured" + (f": {store.error}" if store.error else " (set DATABASE_URL)"))
+
+    def valid_uuid(v: str | None) -> str | None:
+        if v is None:
+            return None
+        try:
+            return str(uuid.UUID(v))
+        except ValueError:
+            raise HttpError(400, "Invalid run id") from None
+
+    @app.get("/api/db/status", tags=["history"], dependencies=[Depends(require_authority)])
+    async def db_status():
+        return await asyncio.to_thread(store.status)
+
+    @app.get("/api/history/runs", tags=["history"], dependencies=[Depends(require_authority)])
+    async def history_runs(limit: int = Query(default=20, ge=1, le=200)):
+        require_db()
+        return await asyncio.to_thread(store.list_runs, limit)
+
+    @app.get("/api/history/incidents", tags=["history"], dependencies=[Depends(require_authority)])
+    async def history_incidents(run: str | None = None, limit: int = Query(default=50, ge=1, le=500)):
+        require_db()
+        return await asyncio.to_thread(store.list_incidents, valid_uuid(run), limit)
+
+    @app.get("/api/history/incidents/{run}/{code}/trail", tags=["history"], dependencies=[Depends(require_authority)])
+    async def history_trail(run: str, code: str):
+        require_db()
+        return await asyncio.to_thread(store.incident_trail, valid_uuid(run), code)
+
+    @app.get("/api/history/reports", tags=["history"], dependencies=[Depends(require_authority)])
+    async def history_reports(run: str | None = None, sector: str | None = None, limit: int = Query(default=100, ge=1, le=1000)):
+        require_db()
+        return await asyncio.to_thread(store.list_reports, valid_uuid(run), sector, limit)
 
     @app.api_route("/api/{rest:path}", methods=["GET", "POST"], include_in_schema=False)
     async def api_404(rest: str):

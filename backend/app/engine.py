@@ -18,6 +18,7 @@ import time
 
 from . import fusion, gemini, nlp, planner, traffic
 from .config import build_world, neighbours
+from .db import Store
 from .fusion import RANK
 from .scenario import G10_MONSOON
 
@@ -40,7 +41,8 @@ def clamp(x: float, a: float, b: float) -> float:
 
 
 class Engine:
-    def __init__(self, tick_ms: int = 1500, seed: int = 7):
+    def __init__(self, tick_ms: int = 1500, seed: int = 7, store: Store | None = None):
+        self.store = store or Store(None)  # Store(None) = in-memory only
         self.world = build_world()
         self.base_tick_ms = tick_ms
         self.seed = seed
@@ -80,10 +82,11 @@ class Engine:
         self.traffic_history = {s: [] for s in sec}
         self.assessments: dict[str, dict] = {}
         self.seq = {"inc": 0, "ticket": 1040, "rep": 0, "bc": 0}
+        self.store.new_run()  # every reset / play is a separate run in PostgreSQL
         self.update_weather()
         self.record_traffic()
         self.fuse_all()
-        self.log("system", "Nikaasi online. Feeds connected: citizen reports, PMD weather (mock), ITP traffic (mock).")
+        self.log("system", "Nikaasi online. Feeds connected: citizen reports, PMD weather (mock), ITP traffic (mock).", persist=False)
         self.emit()
 
     @property
@@ -118,6 +121,7 @@ class Engine:
         self.reset()
         self.scenario = {"name": "G-10 monsoon evening", "startedAt": self.sim_min,
                          "script": [dict(s, done=False) for s in G10_MONSOON]}
+        self.store.set_scenario(self.scenario["name"])
         self.log("scenario", 'Scenario started: "G-10 monsoon evening".')
         self.tick()
         self.start()
@@ -254,6 +258,7 @@ class Engine:
             "position": position,
         }
         self.reports.append(report)
+        self.store.save_report(report, photo)
         short = text[:80] + ("…" if len(text) > 80 else "")
         self.log("report", f'{report["name"]} ({sector}): "{short}" → AI: {ai["summary"]} [evidence {ai["floodEvidence"]}]', sector)
         self.fuse_all()
@@ -359,6 +364,7 @@ class Engine:
                     "id": f"NKS-{self.seq['inc']:04d}", "sector": sector, "status": "open",
                     "openedAt": self.sim_min, "openedClock": self.clock(), "severity": sev, "peakSeverity": sev,
                     "trail": [], "plan": None, "execution": None, "quietMin": 0, "planPending": False, "lastChange": None,
+                    "assessment": a,
                 }
                 self.incidents.append(inc)
                 self.log("incident", f"Incident {inc['id']} opened for {sector} — {sev} ({a['final']['score']}/100).", sector)
@@ -484,6 +490,7 @@ class Engine:
             "status": "Created", "createdAt": self.sim_min, "history": [{"status": "Created", "clock": self.clock()}],
         }
         self.tickets.append(t)
+        self.store.save_ticket(t)
         self.log("dispatch", f"Ticket {t['id']} ({t['priority']}) created → {t['team']}, ETA {t['etaMin']} min.", inc["sector"])
 
     def progress_tickets(self) -> None:
@@ -495,6 +502,7 @@ class Engine:
                     return
                 t["status"] = status
                 t["history"].append({"status": status, "clock": self.clock(), "note": note})
+                self.store.save_ticket(t)
                 self.log("dispatch", f"{t['id']}: {status}" + (f" — {note}" if note else ""), t["sector"])
 
             if t["status"] == "Created" and age >= 1:
@@ -539,13 +547,15 @@ class Engine:
         self.log("incident", f"{inc['id']} resolved.", inc["sector"])
         n = self.world["sectors"][inc["sector"]]["residents"]
         self.seq["bc"] += 1
-        self.broadcasts.append({
+        all_clear = {
             "id": f"BC-{self.seq['bc']}", "incidentId": inc["id"], "sectors": [inc["sector"]], "clock": self.clock(),
             "simMin": self.sim_min, "kind": "all_clear",
             "message": {"en": f"[Nikaasi ALL CLEAR] Water cleared in {inc['sector']}. Roads reopened. Drive carefully.",
                         "ur": f"[Nikaasi] {inc['sector']} mein pani nikal gaya hai, sarkein khul gayi hain."},
             "recipients": n, "delivered": n, "failed": 0,
-        })
+        }
+        self.broadcasts.append(all_clear)
+        self.store.save_broadcast(all_clear)
 
     def send_broadcast(self, inc: dict, action: dict) -> None:
         recipients = action["recipients"]
@@ -558,6 +568,7 @@ class Engine:
             "channels": ["SMS", "App push", "WhatsApp (mock)"],
         }
         self.broadcasts.append(bc)
+        self.store.save_broadcast(bc)
         self.informed.update(action["sectors"])
         self.log("alert", f"Alert {bc['id']} sent to {recipients:,} residents ({bc['delivered']:,} delivered, {failed} failed).", inc["sector"])
 
@@ -568,6 +579,8 @@ class Engine:
             entry["snapshot"] = {"score": f["score"], "severity": f["severity"], "confidence": f["confidence"],
                                  "breakdown": a["breakdown"], "engine": f["engine"]}
         inc["trail"].append(entry)
+        self.store.save_incident(inc)
+        self.store.save_trail(inc, entry)
 
     # ------------------------------------------------------------ authority controls
     def set_weather_override(self, sector: str, alert: str, rain_mm_hr) -> None:
@@ -595,8 +608,11 @@ class Engine:
         m = (START_CLOCK_MIN + (self.sim_min if minute is None else minute)) % (24 * 60)
         return f"{m // 60:02d}:{m % 60:02d}"
 
-    def log(self, kind: str, text: str, sector: str | None = None) -> None:
-        self.events.append({"clock": self.clock(), "simMin": self.sim_min, "type": kind, "text": text, "sector": sector})
+    def log(self, kind: str, text: str, sector: str | None = None, persist: bool = True) -> None:
+        e = {"clock": self.clock(), "simMin": self.sim_min, "type": kind, "text": text, "sector": sector}
+        self.events.append(e)
+        if persist:
+            self.store.save_event(e)
         del self.events[:-300]
 
     def public_assessment(self, s: str) -> dict:
@@ -615,6 +631,7 @@ class Engine:
             "clock": self.clock(), "simMin": self.sim_min, "running": self.running, "speed": self.speed,
             "scenario": self.scenario["name"] if self.scenario else None,
             "ai": self.ai_status(),
+            "db": {"enabled": self.store.enabled, "runId": str(self.store.run_id) if self.store.run_id else None},
             "settings": self.settings,
             "sectors": {s: self.public_assessment(s) for s in self.world["sectors"]},
             "weather": self.weather,

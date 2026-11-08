@@ -18,7 +18,7 @@ Requires **Python 3.10+**.
 cd nikaasi/backend
 pip install -r requirements.txt
 python run.py            # http://localhost:3000  ·  API docs: http://localhost:3000/docs
-python -m pytest         # 8 tests
+python -m pytest         # 8 tests (+3 PostgreSQL tests, see below)
 ```
 | File | Role |
 |---|---|
@@ -26,8 +26,50 @@ python -m pytest         # 8 tests
 | `backend/app/engine.py` | Async simulation clock, incidents, execution, tickets, alerts |
 | `backend/app/fusion.py` · `nlp.py` · `gemini.py` | Severity rule, Roman Urdu interpreter, Google AI Studio adapter (httpx) |
 | `backend/app/planner.py` · `traffic.py` · `config.py` · `scenario.py` | Response planner, traffic model, world map, demo script |
+| `backend/app/db.py` | PostgreSQL schema and write-behind store (SQLAlchemy + psycopg2) |
 
 All routes are `async def`, so the engine and its tick loop stay on the event-loop thread.
+
+### PostgreSQL database (FastAPI backend)
+With `DATABASE_URL` set in `nikaasi/.env`, everything the system records is saved to PostgreSQL. Without it, or if the server can't be reached, the app runs in memory as before.
+
+1. Create the database (PostgreSQL 14+):
+   ```bash
+   createdb -U postgres nikaasi
+   ```
+2. Add it to `nikaasi/.env`:
+   ```
+   DATABASE_URL=postgresql://postgres@localhost:5432/nikaasi
+   ```
+   Include a password if your server needs one: `postgresql://postgres:PASSWORD@localhost:5432/nikaasi`.
+3. Start the server. Tables are created automatically.
+
+| Table | Contents |
+|---|---|
+| `runs` | One row per demo session (each Play / Reset); every other row has its `run_id` |
+| `reports` | Citizen reports: text, sector, AI reading (`ai` JSONB), hazard, GPS, photo (`bytea`) |
+| `incidents` | One row per incident: status, severity, peak, score, explanation, response `plan` and before/after `impact` (JSONB) |
+| `incident_trail` | The reasoning trail, one row per step, with a score snapshot |
+| `tickets` | Dispatch tickets with status and full `history` |
+| `broadcasts` | Resident alerts (English + Roman Urdu), recipients, delivered, failed |
+| `events` | The activity log |
+
+Writes go through a background thread, so the simulation never waits on the database. History is available to the authority (PIN header `x-authority-pin`):
+
+| Endpoint | Returns |
+|---|---|
+| `GET /api/db/status` | Connection status and row counts |
+| `GET /api/history/runs` | Past runs with report / incident counts |
+| `GET /api/history/incidents?run=` | Incidents (optionally for one run) |
+| `GET /api/history/incidents/{run}/{code}/trail` | Stored reasoning trail |
+| `GET /api/history/reports?run=&sector=` | Stored reports |
+
+Database tests use a separate, throwaway database. Their tables are dropped and recreated each run:
+```bash
+createdb -U postgres nikaasi_test
+set NIKAASI_TEST_DATABASE_URL=postgresql://postgres@localhost:5432/nikaasi_test
+python -m pytest
+```
 
 ### Node backend (original prototype)
 Requires **Node.js 18+**, with no dependencies.
@@ -72,5 +114,6 @@ There are 8 tests: report understanding, every fusion rule property (a single re
 ## Honest limits
 - The map is a **schematic** of 12 sectors, not real road geometry. Sector centres are approximate and only used to snap a GPS fix.
 - Weather and traffic feeds are **simulated**. They come from the same world model, so they stay consistent with each other and react to the response.
-- Alerts and tickets are simulated (no SMS gateway, no CDA system). State lives in memory and resets on restart.
+- Alerts and tickets are simulated (no SMS gateway, no CDA system).
+- With PostgreSQL, records are kept across restarts, but a restart still begins a fresh simulation: past runs are history, not resumed. The Node backend keeps everything in memory.
 - The authority PIN is a demo gate, not real authentication.
