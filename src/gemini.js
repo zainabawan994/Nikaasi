@@ -9,13 +9,15 @@
 const API = 'https://generativelanguage.googleapis.com/v1beta/models';
 
 function enabled() { return Boolean(process.env.GEMINI_API_KEY); }
-function model() { return process.env.GEMINI_MODEL || 'gemini-2.5-flash'; }
+function model() { return process.env.GEMINI_MODEL || 'gemini-3.5-flash'; }
 
-async function generateJSON(parts, { timeoutMs = 12000, temperature = 0.2 } = {}) {
+async function generateJSON(parts, { timeoutMs = 20000, temperature = 0.2 } = {}) {
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), timeoutMs);
   try {
-    const res = await fetch(`${API}/${model()}:generateContent`, {
+    let res;
+    for (let attempt = 0; attempt < 2; attempt++) {
+    res = await fetch(`${API}/${model()}:generateContent`, {
       method: 'POST',
       signal: ctrl.signal,
       headers: { 'content-type': 'application/json', 'x-goog-api-key': process.env.GEMINI_API_KEY },
@@ -24,9 +26,13 @@ async function generateJSON(parts, { timeoutMs = 12000, temperature = 0.2 } = {}
         generationConfig: { temperature, responseMimeType: 'application/json' },
       }),
     });
+      // Google returns 503 "high demand" / 429 in short bursts: retry once
+      if (![429, 503].includes(res.status) || attempt === 1) break;
+      await new Promise((r) => setTimeout(r, 2000));
+    }
     if (!res.ok) throw new Error(`Gemini HTTP ${res.status}: ${(await res.text()).slice(0, 200)}`);
     const data = await res.json();
-    const text = data?.candidates?.[0]?.content?.parts?.map((p) => p.text || '').join('') || '';
+    const text = data?.candidates?.[0]?.content?.parts?.filter((p) => !p.thought).map((p) => p.text || '').join('') || '';
     return JSON.parse(text.replace(/^```(json)?|```$/g, '').trim());
   } finally {
     clearTimeout(timer);

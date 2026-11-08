@@ -176,7 +176,7 @@ if (require.main === module) {
     console.log(`Nikaasi running → http://localhost:${PORT}`);
     console.log(`  Citizen app:        http://localhost:${PORT}/citizen.html`);
     console.log(`  Authority dashboard: http://localhost:${PORT}/authority.html  (PIN ${PIN === '1122' ? '1122' : 'from AUTHORITY_PIN'})`);
-    console.log(`  AI engine: ${process.env.GEMINI_API_KEY ? `Gemini (${process.env.GEMINI_MODEL || 'gemini-2.5-flash'}) + rules-v1` : 'rules-v1 (set GEMINI_API_KEY to enable Gemini)'}`);
+    console.log(`  AI engine: ${process.env.GEMINI_API_KEY ? `Gemini (${process.env.GEMINI_MODEL || 'gemini-3.5-flash'}) + rules-v1` : 'rules-v1 (set GEMINI_API_KEY to enable Gemini)'}`);
   });
 }
 

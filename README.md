@@ -10,7 +10,27 @@ Nikaasi combines three signals that usually live in separate systems:
 It judges **how serious** the flooding really is, with a confidence level and a plain-language explanation. It then **plans and simulates** a coordinated response: closing and rerouting flooded roads, dispatching CDA drain crews and Rescue 1122, and alerting residents. The authority dashboard shows the zone **before, after, and what would have happened with no response**.
 
 ## Run it
-Requires **Node.js 18+**. No `npm install` is needed: the app has zero dependencies.
+There are two interchangeable backends. Both serve the same API and the same frontend in `public/`.
+
+### Python / FastAPI backend (recommended)
+Requires **Python 3.10+**.
+```bash
+cd nikaasi/backend
+pip install -r requirements.txt
+python run.py            # http://localhost:3000  ·  API docs: http://localhost:3000/docs
+python -m pytest         # 8 tests
+```
+| File | Role |
+|---|---|
+| `backend/app/main.py` | FastAPI routes, Pydantic schemas, PIN dependency, SSE stream, static frontend |
+| `backend/app/engine.py` | Async simulation clock, incidents, execution, tickets, alerts |
+| `backend/app/fusion.py` · `nlp.py` · `gemini.py` | Severity rule, Roman Urdu interpreter, Google AI Studio adapter (httpx) |
+| `backend/app/planner.py` · `traffic.py` · `config.py` · `scenario.py` | Response planner, traffic model, world map, demo script |
+
+All routes are `async def`, so the engine and its tick loop stay on the event-loop thread.
+
+### Node backend (original prototype)
+Requires **Node.js 18+**, with no dependencies.
 ```bash
 cd nikaasi
 npm start                # http://localhost:3000
@@ -30,7 +50,7 @@ Press **▶ Play "G-10 monsoon" story** on the dashboard. See [`docs/DEMO_SCRIPT
 
 Gemini then reads every citizen report, including the photo, and re-judges each incident. Its score is blended with the deterministic rule engine and **clamped to ±15 points**, and both are shown. Without a key, or if the call fails or times out, everything runs on the offline engines, so a demo never breaks on bad Wi-Fi.
 
-## Test
+## Test (Node)
 ```bash
 npm test
 ```

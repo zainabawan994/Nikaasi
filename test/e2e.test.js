@@ -5,7 +5,7 @@
  */
 const test = require('node:test');
 const assert = require('node:assert');
-delete process.env.GEMINI_API_KEY; // deterministic, offline
+process.env.GEMINI_API_KEY = ''; // deterministic, offline (empty also stops .env from loading a real key)
 const { Engine } = require('../src/engine');
 const { createServer } = require('../server');
 
