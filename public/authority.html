@@ -16,7 +16,8 @@
       <span class="badge dark live" id="run-badge"><span class="dot"></span>paused</span>
       <span class="badge dark" id="ai-badge">AI</span>
       <span class="spacer"></span>
-      <button class="btn primary" id="play">▶ Play "G-10 monsoon" story</button>
+      <button class="btn primary" id="live-btn" title="Real-time mode with live rainfall">🌐 Live</button>
+      <button class="btn ghost" id="play">▶ Demo story</button>
       <button class="btn ghost" id="pause">⏸ Pause</button>
       <button class="btn ghost" id="step" title="Advance one simulated minute">+1 min</button>
       <select class="ghost" id="speed" aria-label="Simulation speed">
@@ -65,12 +66,14 @@
         </div>
         <div class="card">
           <h3>📡 Signal feeds</h3>
+          <div class="small muted" id="wx-source" style="margin:-4px 0 8px"></div>
           <div style="max-height:250px;overflow:auto"><table class="tbl" id="feeds"></table></div>
           <details style="margin-top:10px">
-            <summary class="small" style="cursor:pointer;font-weight:600">Set weather alert</summary>
+            <summary class="small" style="cursor:pointer;font-weight:600" id="w-title">Set weather alert</summary>
+            <p class="small muted" id="w-help" style="margin:6px 0 0"></p>
             <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;margin-top:8px">
               <select id="w-sector" aria-label="Sector"></select>
-              <select id="w-level" aria-label="Alert level"><option value="red">Red</option><option value="orange">Orange</option><option value="yellow">Yellow</option><option value="none">None</option><option value="clear">Clear override</option></select>
+              <select id="w-level" aria-label="Alert level"><option value="red">Red</option><option value="orange">Orange</option><option value="yellow">Yellow</option><option value="none">None</option><option value="clear" id="w-clear">Clear</option></select>
               <input type="number" id="w-rain" value="55" min="0" max="150" aria-label="Rain mm/h">
             </div>
             <button class="btn" id="w-apply" style="margin-top:6px">Apply</button>

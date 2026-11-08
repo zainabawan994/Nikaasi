@@ -13,10 +13,12 @@ import asyncio
 import copy
 import logging
 import math
+import os
 import random
 import time
+from datetime import datetime, timedelta, timezone
 
-from . import fusion, gemini, nlp, planner, traffic
+from . import fusion, gemini, nlp, planner, traffic, weather_live
 from .config import build_world, neighbours
 from .db import Store
 from .fusion import RANK
@@ -24,7 +26,11 @@ from .scenario import G10_MONSOON
 
 log = logging.getLogger("nikaasi")
 
-START_CLOCK_MIN = 18 * 60 + 40  # 18:40 PKT
+START_CLOCK_MIN = 18 * 60 + 40  # 18:40 PKT (demo story clock)
+PKT = timezone(timedelta(hours=5))  # Pakistan has no daylight saving
+LIVE_TICK_S = 60                 # live mode: one simulated minute per real minute
+LIVE_STALE_MIN = 30              # ignore live rain data older than this
+PMD_ALERT_HOURS = 6              # officer-entered PMD alerts expire after this
 PUMP_RATE = 5                   # cm/min removed by a drain crew on site
 MAX_DEPTH = 60
 
@@ -41,8 +47,13 @@ def clamp(x: float, a: float, b: float) -> float:
 
 
 class Engine:
-    def __init__(self, tick_ms: int = 1500, seed: int = 7, store: Store | None = None):
+    def __init__(self, tick_ms: int = 1500, seed: int = 7, store: Store | None = None, weather_source: str = "demo"):
         self.store = store or Store(None)  # Store(None) = in-memory only
+        self.default_mode = "live" if weather_source == "live" else "demo"
+        # real-world weather state survives simulation resets
+        self.live = {"data": {}, "ok": False, "fetchedAt": None, "error": None}
+        self.pmd_alerts: dict[str, dict] = {}
+        self._poller: asyncio.Task | None = None
         self.world = build_world()
         self.base_tick_ms = tick_ms
         self.seed = seed
@@ -52,8 +63,9 @@ class Engine:
         self.reset()
 
     # ------------------------------------------------------------ lifecycle
-    def reset(self) -> None:
+    def reset(self, mode: str | None = None) -> None:
         self.stop()
+        self.mode = mode or self.default_mode  # "live" = real weather, real time; "demo" = scripted story
         self.rng = random.Random(self.seed)
         self.sim_min = 0
         self.speed = 1.0
@@ -86,7 +98,10 @@ class Engine:
         self.update_weather()
         self.record_traffic()
         self.fuse_all()
-        self.log("system", "Nikaasi online. Feeds connected: citizen reports, PMD weather (mock), ITP traffic (mock).", persist=False)
+        if self.mode == "live":
+            self.log("system", f"Nikaasi online (LIVE). Rain: {weather_live.PROVIDER} live data; PMD alerts: entered by duty officer; traffic: simulated.", persist=False)
+        else:
+            self.log("system", "Nikaasi online (DEMO). Feeds: citizen reports, PMD weather (mock), ITP traffic (mock).", persist=False)
         self.emit()
 
     @property
@@ -105,7 +120,7 @@ class Engine:
 
     async def _run(self) -> None:
         while True:
-            await asyncio.sleep(max(0.15, self.base_tick_ms / 1000 / self.speed))
+            await asyncio.sleep(LIVE_TICK_S if self.mode == "live" else max(0.15, self.base_tick_ms / 1000 / self.speed))
             try:
                 self.tick()
             except Exception:  # keep the clock alive; log and continue
@@ -117,8 +132,47 @@ class Engine:
         except (TypeError, ValueError):
             self.speed = 1.0
 
+    def go_live(self) -> None:
+        """Real-time mode with live rainfall (the default in production)."""
+        self.reset(mode="live")
+        self.start()
+        self.start_weather_poller()
+        self._spawn(self.refresh_live_weather())
+
+    def start_weather_poller(self) -> None:
+        if self._poller and not self._poller.done():
+            return
+        self._poller = asyncio.get_running_loop().create_task(self._poll_weather())
+
+    async def _poll_weather(self) -> None:
+        interval = max(60, int(os.environ.get("WEATHER_REFRESH_S", "300")))
+        while True:
+            if self.mode == "live":
+                await self.refresh_live_weather()
+            await asyncio.sleep(interval if self.mode == "live" else 30)
+
+    async def refresh_live_weather(self) -> None:
+        try:
+            data = await weather_live.fetch(self.world["sectors"])
+        except Exception as e:  # noqa: BLE001 - network problems must never stop the engine
+            first_failure = self.live["ok"] or self.live["error"] is None
+            self.live.update(ok=False, error=str(e)[:160])
+            if first_failure:
+                self.log("weather", f"Live weather unavailable ({str(e)[:80]}). Retrying automatically.")
+            log.warning("live weather fetch failed: %s", e)
+        else:
+            was_down = not self.live["ok"] and self.live["fetchedAt"] is not None
+            self.live.update(data=data, ok=True, error=None, fetchedAt=datetime.now(timezone.utc))
+            if was_down:
+                self.log("weather", "Live weather restored.")
+        if self.mode == "live":
+            self.update_weather()
+            self.fuse_all()
+            self.manage_incidents()
+            self.emit()
+
     def play_scenario(self) -> None:
-        self.reset()
+        self.reset(mode="demo")
         self.scenario = {"name": "G-10 monsoon evening", "startedAt": self.sim_min,
                          "script": [dict(s, done=False) for s in G10_MONSOON]}
         self.store.set_scenario(self.scenario["name"])
@@ -181,8 +235,11 @@ class Engine:
                 self.ingest_report(sector=r["sector"], reporter_id=r["reporterId"], name=r["name"], text=r["text"],
                                    ai=nlp.interpret(r["text"]), bot=True)
 
-    # ------------------------------------------------------------ mock feeds
+    # ------------------------------------------------------------ weather feed
     def update_weather(self) -> None:
+        if self.mode == "live":
+            self._update_live_weather()
+            return
         c = self.world["sectors"][self.storm["center"]]
         w = {}
         for s in self.world["sectors"].values():
@@ -201,6 +258,32 @@ class Engine:
                 "forecastMmHr": round(rain * (0.9 if self.storm["peak"] > 30 else 0.6), 1),
                 "source": "Manual override (authority)" if m else "PMD Islamabad (mock feed)",
                 "observedAt": self.clock(),
+            }
+        self.weather = w
+
+    def _update_live_weather(self) -> None:
+        now = datetime.now(timezone.utc)
+        fetched = self.live["fetchedAt"]
+        fresh = fetched is not None and now - fetched <= timedelta(minutes=LIVE_STALE_MIN)
+        for sid in [k for k, v in self.pmd_alerts.items() if v["until"] <= now]:
+            del self.pmd_alerts[sid]
+            self.log("weather", f"PMD alert for {sid} expired.", sid)
+        w = {}
+        for sid in self.world["sectors"]:
+            d = self.live["data"].get(sid) if fresh else None
+            rain = d["rainMmHr"] if d else 0.0
+            forecast = d["forecastMmHr"] if d else 0.0
+            rain_alert = weather_live.alert_for(max(rain, forecast))
+            pmd = self.pmd_alerts.get(sid)
+            alert = weather_live.max_level(rain_alert, pmd["level"] if pmd else "none")
+            sources = [f"{weather_live.PROVIDER} (live)" if d else "live rain unavailable"]
+            if pmd:
+                sources.append(f"PMD alert entered by {pmd['by']}")
+            w[sid] = {
+                "sector": sid, "alert": alert, "rainMmHr": rain, "forecastMmHr": forecast,
+                "rainAlert": rain_alert, "pmdAlert": pmd["level"] if pmd else None,
+                "source": " + ".join(sources),
+                "observedAt": d["observedAt"] if d else None,
             }
         self.weather = w
 
@@ -583,9 +666,30 @@ class Engine:
         self.store.save_trail(inc, entry)
 
     # ------------------------------------------------------------ authority controls
-    def set_weather_override(self, sector: str, alert: str, rain_mm_hr) -> None:
+    def set_pmd_alert(self, sector: str, level: str, by: str = "duty officer", hours: float = PMD_ALERT_HOURS) -> None:
+        """Record an official PMD alert (PMD has no public API, so an officer enters it)."""
         if sector not in self.world["sectors"]:
             raise HttpError(400, "Unknown sector")
+        if level in ("clear", "none"):
+            if self.pmd_alerts.pop(sector, None):
+                self.log("weather", f"PMD alert for {sector} cleared by {by}.", sector)
+        elif level in ("yellow", "orange", "red"):
+            until = datetime.now(timezone.utc) + timedelta(hours=hours)
+            self.pmd_alerts[sector] = {"level": level, "by": by, "until": until}
+            self.log("weather", f"PMD {level.upper()} alert for {sector} entered by {by} (valid until {until.astimezone(PKT):%H:%M}).", sector)
+        else:
+            raise HttpError(400, "Bad alert level")
+        self.update_weather()
+        self.fuse_all()
+        self.manage_incidents()
+        self.emit()
+
+    def set_weather_override(self, sector: str, alert: str, rain_mm_hr, by: str = "duty officer") -> None:
+        if sector not in self.world["sectors"]:
+            raise HttpError(400, "Unknown sector")
+        if self.mode == "live":  # real weather is never overridden; the officer records the PMD alert instead
+            self.set_pmd_alert(sector, alert, by)
+            return
         if alert == "clear":
             self.manual_weather.pop(sector, None)
             self.log("weather", f"Manual weather override cleared for {sector}.", sector)
@@ -605,6 +709,8 @@ class Engine:
 
     # ------------------------------------------------------------ views
     def clock(self, minute: int | None = None) -> str:
+        if getattr(self, "mode", "demo") == "live" and minute is None:
+            return datetime.now(PKT).strftime("%H:%M")
         m = (START_CLOCK_MIN + (self.sim_min if minute is None else minute)) % (24 * 60)
         return f"{m // 60:02d}:{m % 60:02d}"
 
@@ -623,6 +729,19 @@ class Engine:
                 "rules": {"score": a["score"], "severity": a["severity"], "explanation": a["explanation"]},
                 "breakdown": a["breakdown"], "signals": a["signals"]}
 
+    def weather_source(self) -> dict:
+        if self.mode != "live":
+            return {"mode": "demo", "provider": "Scripted demo (PMD mock)"}
+        f = self.live["fetchedAt"]
+        return {
+            "mode": "live", "provider": weather_live.PROVIDER, "attribution": weather_live.ATTRIBUTION,
+            "ok": self.live["ok"], "error": "unavailable" if self.live["error"] else None,
+            "fetchedAt": f.astimezone(PKT).strftime("%H:%M") if f else None,
+            "thresholdsMmHr": weather_live.thresholds(),
+            "pmdAlerts": {k: {"level": v["level"], "by": v["by"], "until": v["until"].astimezone(PKT).strftime("%H:%M")}
+                          for k, v in self.pmd_alerts.items()},
+        }
+
     def ai_status(self) -> dict:
         return {"enabled": gemini.enabled(), "model": gemini.model() if gemini.enabled() else None}
 
@@ -631,6 +750,8 @@ class Engine:
             "clock": self.clock(), "simMin": self.sim_min, "running": self.running, "speed": self.speed,
             "scenario": self.scenario["name"] if self.scenario else None,
             "ai": self.ai_status(),
+            "mode": self.mode,
+            "weatherSource": self.weather_source(),
             "db": {"enabled": self.store.enabled, "runId": str(self.store.run_id) if self.store.run_id else None},
             "settings": self.settings,
             "sectors": {s: self.public_assessment(s) for s in self.world["sectors"]},

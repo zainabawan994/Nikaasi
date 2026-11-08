@@ -48,6 +48,7 @@
   }
 
   $('play').onclick = () => { userPicked = false; selIncident = null; api('/api/scenario', { action: 'play' }); };
+  $('live-btn').onclick = () => { userPicked = false; selIncident = null; api('/api/scenario', { action: 'live' }); };
   $('pause').onclick = () => api('/api/scenario', { action: state && state.running ? 'pause' : 'resume' });
   $('step').onclick = () => api('/api/scenario', { action: 'step' });
   $('reset').onclick = () => { selIncident = null; userPicked = false; api('/api/scenario', { action: 'reset' }); };
@@ -73,7 +74,13 @@
   function draw() {
     if (!state || !world) return;
     $('clock').textContent = state.clock;
-    $('run-badge').innerHTML = `<span class="dot"></span>${state.running ? `live · ${state.speed}×` : 'paused'}${state.scenario ? ` · ${esc(state.scenario)}` : ''}`;
+    const live = state.mode === 'live';
+    $('run-badge').innerHTML = `<span class="dot"></span>${!state.running ? 'paused' : live ? 'LIVE · real time' : `demo · ${state.speed}×`}${state.scenario ? ` · ${esc(state.scenario)}` : ''}`;
+    $('live-btn').className = `btn ${live ? 'primary' : 'ghost'}`;
+    $('play').className = `btn ${live ? 'ghost' : 'primary'}`;
+    $('speed').disabled = live;
+    $('step').disabled = live;
+    drawWeatherSource(live);
     $('pause').textContent = state.running ? '⏸ Pause' : '▶ Resume';
     $('ai-badge').textContent = state.ai.enabled ? 'AI: Gemini' : 'AI: offline';
     $('auto').checked = !!state.settings.autoExecute;
@@ -265,6 +272,21 @@
     keepScroll($('trail'), inc ? inc.trail.slice().reverse().map((t) => `
       <li class="k-${t.kind}"><div class="when">${t.clock} · ${t.kind.toUpperCase()}${t.snapshot ? ` · ${t.snapshot.score}/100 ${t.snapshot.severity} · ${t.snapshot.engine}` : ''}</div><div class="small">${esc(t.text)}</div></li>`).join('')
       : '<div class="empty">Select an incident.</div>');
+  }
+
+  function drawWeatherSource(live) {
+    const ws = state.weatherSource || {};
+    const pmd = Object.entries(ws.pmdAlerts || {}).map(([s, a]) => `${s} ${a.level.toUpperCase()} (by ${esc(a.by)}, until ${a.until})`);
+    $('wx-source').innerHTML = !live
+      ? 'Demo: scripted storm and mock PMD alerts.'
+      : `${ws.ok ? '🟢' : '🔴'} Rain: <b>${esc(ws.provider)}</b> live${ws.fetchedAt ? `, updated ${ws.fetchedAt}` : ''}${ws.ok ? '' : ' (unavailable, retrying)'}`
+        + ` · auto alert at ${(ws.thresholdsMmHr || []).join('/')} mm/h`
+        + `<br>PMD alerts: ${pmd.length ? pmd.join(', ') : 'none entered'}`
+        + `<br><span style="font-size:10px">${esc(ws.attribution || '')}</span>`;
+    $('w-title').textContent = live ? 'Enter PMD alert' : 'Set weather alert (demo)';
+    $('w-help').textContent = live ? 'Record an official PMD alert for a sector. It lasts 6 hours. Rain stays live.' : 'Override the demo weather for a sector.';
+    $('w-rain').classList.toggle('hidden', live);
+    $('w-clear').textContent = live ? 'Clear PMD alert' : 'Clear override';
   }
 
   function drawFeeds() {

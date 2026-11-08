@@ -11,6 +11,8 @@ Environment (see .env.example and SECURITY.md):
   ALLOWED_ORIGINS    extra origins allowed to POST (comma separated); same-origin always allowed
   COOKIE_SECURE      1 to force Secure cookies (default: on in production)
   TRUST_PROXY        1 when behind a reverse proxy that sets X-Forwarded-For
+  WEATHER_SOURCE     live (default: real rain from Open-Meteo, real-time clock) | demo (scripted story only)
+  WEATHER_REFRESH_S  live rain refresh interval, default 300 · WEATHER_ALERT_MM  "10,25,50" mm/h for yellow/orange/red
   GEMINI_API_KEY, GEMINI_MODEL, TICK_MS
 """
 from __future__ import annotations
@@ -92,7 +94,7 @@ class UserUpdateIn(BaseModel):
 
 
 class ScenarioIn(BaseModel):
-    action: Literal["play", "reset", "pause", "resume", "step", "speed"]
+    action: Literal["play", "live", "reset", "pause", "resume", "step", "speed"]
     speed: float | None = None
 
 
@@ -110,7 +112,8 @@ class SettingsIn(BaseModel):
 def create_app(engine: Engine | None = None) -> FastAPI:
     # All routes are `async def` on purpose: the engine and its tick loop live on the
     # event loop thread, so no handler may touch it from a worker thread.
-    eng = engine or Engine(tick_ms=int(os.environ.get("TICK_MS", "1500")), store=Store(os.environ.get("DATABASE_URL")))
+    eng = engine or Engine(tick_ms=int(os.environ.get("TICK_MS", "1500")), store=Store(os.environ.get("DATABASE_URL")),
+                           weather_source=os.environ.get("WEATHER_SOURCE", "live"))
     store = eng.store
     auth = AuthService(store)
     cookie_name = "__Host-nikaasi_session" if cookie_secure() else "nikaasi_session"
@@ -123,6 +126,8 @@ def create_app(engine: Engine | None = None) -> FastAPI:
     @asynccontextmanager
     async def lifespan(_: FastAPI):
         await asyncio.to_thread(bootstrap_admin)
+        if eng.default_mode == "live":
+            eng.go_live()  # real-time clock + live rainfall from the start
         yield
         eng.stop()
         await asyncio.to_thread(store.close)
@@ -356,6 +361,8 @@ def create_app(engine: Engine | None = None) -> FastAPI:
     async def scenario(body: ScenarioIn, request: Request, user: dict = Depends(require_authority)):
         if body.action == "play":
             eng.play_scenario()
+        elif body.action == "live":
+            eng.go_live()
         elif body.action == "reset":
             eng.reset()
         elif body.action == "pause":
@@ -366,15 +373,16 @@ def create_app(engine: Engine | None = None) -> FastAPI:
             eng.tick()
         elif body.action == "speed":
             eng.set_speed(body.speed)
-        if body.action in ("play", "reset"):
+        if body.action in ("play", "live", "reset"):
             audit(user, f"scenario.{body.action}", None, request)
         eng.emit()
         return {"ok": True, "running": eng.running, "speed": eng.speed}
 
     @app.post("/api/weather", tags=["authority"])
     async def weather_override(body: WeatherIn, request: Request, user: dict = Depends(require_authority)):
-        eng.set_weather_override(body.sector, body.alert, body.rainMmHr)
-        audit(user, "weather.override", body.model_dump(), request)
+        eng.set_weather_override(body.sector, body.alert, body.rainMmHr, by=user["name"])
+        audit(user, "weather.pmd_alert" if eng.mode == "live" else "weather.override",
+              {k: v for k, v in body.model_dump().items() if eng.mode != "live" or k != "rainMmHr"}, request)
         return {"ok": True}
 
     @app.post("/api/settings", tags=["authority"])

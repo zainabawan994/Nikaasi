@@ -21,3 +21,5 @@ def sign_in(client, role="admin", email=None):
     r = client.post("/api/auth/login", json={"email": email, "password": TEST_PASSWORD})
     assert r.status_code == 200, r.text
     return r.json()
+
+os.environ["WEATHER_SOURCE"] = "demo"  # tests never call the live weather API

@@ -94,6 +94,16 @@ npm start                # http://localhost:3000
 
 Press **▶ Play "G-10 monsoon" story** on the dashboard. See [`docs/DEMO_SCRIPT.md`](docs/DEMO_SCRIPT.md) for the walkthrough.
 
+### Live weather vs demo story
+The FastAPI backend starts in **live mode** (`WEATHER_SOURCE=live`):
+- The clock runs in real Pakistan time.
+- **Real rainfall** for every sector comes from [Open-Meteo](https://open-meteo.com): current intensity plus the next hour, refreshed every 5 minutes (`WEATHER_REFRESH_S`).
+- Rain alone raises yellow / orange / red at **10 / 25 / 50 mm/h** (`WEATHER_ALERT_MM`), using whichever is higher, now or the next hour.
+- **PMD has no public API.** Official PMD alerts are entered by the duty officer on the dashboard (*Signal feeds → Enter PMD alert*). They last 6 hours, are recorded in the audit log, and never override measured rain.
+- If Open-Meteo can't be reached, the dashboard says so. Rain older than 30 minutes is ignored rather than shown as current.
+- **▶ Demo story** switches to the scripted G-10 monsoon evening; **🌐 Live** switches back. Traffic, SMS and dispatch remain simulated in both modes.
+- Open-Meteo's free tier is for non-commercial use (attribution shown in the UI). Commercial deployments need their paid plan.
+
 ### Turn on Gemini (Google AI Studio)
 1. Get a key at https://aistudio.google.com/apikey
 2. Copy `.env.example` to `.env` and set `GEMINI_API_KEY=...` (optionally `GEMINI_MODEL`).
@@ -122,7 +132,7 @@ There are 8 tests: report understanding, every fusion rule property (a single re
 
 ## Honest limits
 - The map is a **schematic** of 12 sectors, not real road geometry. Sector centres are approximate and only used to snap a GPS fix.
-- Weather and traffic feeds are **simulated**. They come from the same world model, so they stay consistent with each other and react to the response.
+- **Rain is live** (Open-Meteo); PMD alerts are entered by hand because PMD has no API. **Traffic is simulated** from the same world model, so it reacts to the flooding and to the response. Live traffic would need a provider such as Google Maps or ITP data.
 - Alerts and tickets are simulated (no SMS gateway, no CDA system).
 - With PostgreSQL, records are kept across restarts, but a restart still begins a fresh simulation: past runs are history, not resumed. The Node backend keeps everything in memory.
 - The Node prototype only has a shared demo PIN and no accounts. Use the FastAPI backend for anything beyond a local demo.
